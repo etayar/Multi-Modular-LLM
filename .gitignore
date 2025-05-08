@@ -1,0 +1,31 @@
+
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+*.so
+
+# Poetry
+.poetry/
+poetry.lock
+
+# Virtual environments
+.venv/
+.env/
+
+# Checkpoints & logs
+checkpoints/
+logs/
+*.ckpt
+
+# Datasets
+data/*.txt
+
+# Jupyter & other temp
+.ipynb_checkpoints/
+*.log
+.DS_Store
+
+# VSCode & PyCharm
+.idea/
+.vscode/
+

@@ -1,0 +1,31 @@
+[tool.poetry]
+name = "multi-modular-llm"
+version = "0.1.0"
+description = "An extensible LLM framework with attention, diffusion, and RL modules."
+authors = ["Your Name <your@email.com>"]
+readme = "README.md"
+packages = [
+  { include = "model" },
+  { include = "utils" },
+  { include = "training" }
+]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+torch = "^2.0"
+transformers = "^4.37"
+datasets = "^2.18"
+tokenizers = "^0.15"
+accelerate = "^0.29"
+scipy = "*"
+wandb = "*"
+matplotlib = "*"
+
+[tool.poetry.group.dev.dependencies]
+black = "*"
+isort = "*"
+mypy = "*"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
