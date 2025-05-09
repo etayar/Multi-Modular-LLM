@@ -145,7 +145,7 @@ def get_config():
         "ckpt_dir": "checkpoints",
         "dataset_path": "data/train.txt",
         "dataset_name": "wikipedia",
-        "dataset_config": "20220301.aa",
+        "dataset_config": "20220301.en",
         "split": "train[:1%]",  # for quick testing, optional
         "use_streaming": True,
         "device": "cuda" if torch.cuda.is_available() else "cpu"
