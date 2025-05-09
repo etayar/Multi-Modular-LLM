@@ -43,8 +43,8 @@ class TransformerTrainer:
             dataset_config = config["dataset_config"]
             split = config.get("split", "train")
             self.dataset = StreamingTextDataset(
-                config["dataset_name"],
-                self.tokenizer,
+                dataset_name=config["dataset_name"],
+                tokenizer=self.tokenizer,
                 max_length=config["max_len"],
                 dataset_config=dataset_config,
                 split=split
