@@ -5,8 +5,7 @@ import torch
 
 class StreamingTextDataset(IterableDataset):
     def __init__(self, dataset_name, tokenizer, max_length=64, split="train", dataset_config=None):
-        print("[DEBUG] Entered StreamingTextDataset")
-        print("dataset_config =", dataset_config)
+        print(f"[COLAB DEBUG] dataset_name = {config['dataset_name']}, dataset_config = {config.get('dataset_config')}")
 
         self.split = split
 
