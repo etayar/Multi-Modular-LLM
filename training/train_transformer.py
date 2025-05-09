@@ -42,8 +42,10 @@ class TransformerTrainer:
             print(f"[INFO] Using Hugging Face streaming dataset: {config['dataset_name']}")
             dataset_config = config["dataset_config"]
             split = config.get("split", "train")
+            dataset_name = config["dataset_name"]
+            print(f"[DEBUG] Loading dataset: {dataset_name} | config: {dataset_config} | split: {split}")
             self.dataset = StreamingTextDataset(
-                dataset_name=config["dataset_name"],
+                dataset_name=dataset_name,
                 tokenizer=self.tokenizer,
                 max_length=config["max_len"],
                 dataset_config=dataset_config,

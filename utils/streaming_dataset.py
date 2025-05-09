@@ -6,7 +6,6 @@ import torch
 class StreamingTextDataset(IterableDataset):
     def __init__(self, dataset_name, tokenizer, max_length=64, split="train", dataset_config=None):
         self.split = split
-        print(f"[DEBUG] Loading dataset: {dataset_name} | config: {dataset_config} | split: {split}")
         self.dataset = load_dataset(
             path=dataset_name,
             name=dataset_config,
