@@ -131,7 +131,7 @@ class TransformerTrainer:
     def train(self):
         for epoch in range(1, self.config["epochs"] + 1):
             train_losses = []
-            for input_ids in self.dataloader:
+            for i, input_ids in enumerate(self.dataloader):
                 if self.config.get("max_train_batches") is not None and i >= self.config["max_train_batches"]:
                     break
                 input_ids = input_ids.to(self.device)
