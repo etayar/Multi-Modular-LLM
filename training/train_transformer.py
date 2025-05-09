@@ -102,9 +102,13 @@ class TransformerTrainer:
             writer.writerow([datetime.now().isoformat(), epoch, train_loss, eval_loss, perplexity, self.config["__data_mode__"], self.config["__git_commit__"], self.config["__run_time__"], self.config["__model_name__"]] + list(self.config.values()))
 
     @torch.no_grad()
-    def evaluate(self, num_batches=5):
+    def evaluate(self, num_batches=None):
         self.model.eval()
         total_loss = 0
+
+        # Respect config override or default to 5
+        num_batches = num_batches or self.config.get("max_eval_batches") or 5
+
         for i, input_ids in enumerate(self.dataloader):
             if i >= num_batches:
                 break
@@ -112,6 +116,7 @@ class TransformerTrainer:
             logits = self.model(input_ids)
             loss = self.criterion(logits.view(-1, logits.size(-1)), input_ids.view(-1))
             total_loss += loss.item()
+
         avg_loss = total_loss / num_batches
         perplexity = torch.exp(torch.tensor(avg_loss)).item()
         print(f"Validation Loss: {avg_loss:.4f} | Perplexity: {perplexity:.2f}")
@@ -121,6 +126,8 @@ class TransformerTrainer:
         for epoch in range(1, self.config["epochs"] + 1):
             train_losses = []
             for input_ids in self.dataloader:
+                if self.config.get("max_train_batches") is not None and i >= self.config["max_train_batches"]:
+                    break
                 input_ids = input_ids.to(self.device)
                 train_loss = self.train_step(input_ids)
                 train_losses.append(train_loss)
@@ -146,9 +153,11 @@ def get_config():
         "dataset_path": "data/train.txt",
         "dataset_name": "wikipedia",
         "dataset_config": "20220301.en",
-        "split": "train[:1%]",  # for quick testing, optional
+        "split": "train",  # for quick testing, optional
         "use_streaming": True,
-        "device": "cuda" if torch.cuda.is_available() else "cpu"
+        "device": "cuda" if torch.cuda.is_available() else "cpu",
+        "max_train_batches": None,
+        "max_eval_batches": None
     }
 
 
