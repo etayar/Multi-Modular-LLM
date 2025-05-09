@@ -9,6 +9,7 @@ from pathlib import Path
 import csv
 import subprocess
 from datetime import datetime
+from tqdm import tqdm
 
 
 class TransformerTrainer:
@@ -117,30 +118,40 @@ class TransformerTrainer:
         self.model.eval()
         total_loss = 0
         num_batches = num_batches or self.config.get("max_eval_batches") or 5
-        for i, input_ids in enumerate(self.dataloader):
+        progress_bar = tqdm(enumerate(self.dataloader), total=num_batches, desc="Evaluating", leave=False)
+        for i, input_ids in progress_bar:
             if i >= num_batches:
                 break
             input_ids = input_ids.to(self.device)
             logits = self.model(input_ids)
             loss = self.criterion(logits.view(-1, logits.size(-1)), input_ids.view(-1))
             total_loss += loss.item()
+            avg_loss_so_far = total_loss / (i + 1)
+            progress_bar.set_postfix(loss=f"{avg_loss_so_far:.4f}")
         avg_loss = total_loss / num_batches
         perplexity = torch.exp(torch.tensor(avg_loss)).item()
-        print(f"Validation Loss: {avg_loss:.4f} | Perplexity: {perplexity:.2f}")
+        print(f"📉 Validation — Avg Loss: {avg_loss:.4f} | Perplexity: {perplexity:.2f}")
         return avg_loss, perplexity
 
     def train(self):
         for epoch in range(1, self.config["epochs"] + 1):
             train_losses = []
-            for i, input_ids in enumerate(self.dataloader):
+            print(f"\n🔁 Epoch {epoch}/{self.config['epochs']}")
+            total_batches = self.config.get("max_train_batches") or len(self.dataloader)
+            progress_bar = tqdm(enumerate(self.dataloader), total=total_batches, desc="Training", leave=False)
+
+            for i, input_ids in progress_bar:
                 if self.config.get("max_train_batches") is not None and i >= self.config["max_train_batches"]:
                     break
                 input_ids = input_ids.to(self.device)
                 train_loss = self.train_step(input_ids)
                 train_losses.append(train_loss)
+                avg_train_loss = sum(train_losses) / len(train_losses)
+                progress_bar.set_postfix(loss=f"{avg_train_loss:.4f}")
+
             avg_train_loss = sum(train_losses) / len(train_losses)
             eval_loss, perplexity = self.evaluate()
-            print(f"Epoch {epoch}/{self.config['epochs']} - Train Loss: {avg_train_loss:.4f} - Eval Loss: {eval_loss:.4f} - Perplexity: {perplexity:.2f}")
+            print(f"✅ Epoch {epoch} Complete — Train Loss: {avg_train_loss:.4f}, Eval Loss: {eval_loss:.4f}, Perplexity: {perplexity:.2f}")
             self.save_checkpoint(epoch, avg_train_loss)
             self.log_metrics(epoch, avg_train_loss, eval_loss, perplexity)
             self.scheduler.step()

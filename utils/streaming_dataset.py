@@ -1,6 +1,5 @@
 from torch.utils.data import IterableDataset
 from datasets import load_dataset
-import torch
 
 
 class StreamingTextDataset(IterableDataset):

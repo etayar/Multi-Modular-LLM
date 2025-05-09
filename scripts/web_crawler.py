@@ -44,7 +44,11 @@ def main():
         "https://en.wikipedia.org/wiki/History_of_mathematics",
         "https://en.wikipedia.org/wiki/Physics",
         "https://www.gutenberg.org/cache/epub/84/pg84.html",  # Frankenstein
-        "https://www.gutenberg.org/cache/epub/98/pg98.html"   # A Tale of Two Cities
+        "https://www.gutenberg.org/cache/epub/98/pg98.html",  # A Tale of Two Cities
+        # --- BBC News (Public Articles) ---
+        "https://www.bbc.com/news/world-asia-68838588",  # News article
+        "https://www.bbc.com/news/science-environment-68820146",
+        "https://www.bbc.com/news/technology-68812335"
     ]
 
     crawl(urls, Path(args.output))
