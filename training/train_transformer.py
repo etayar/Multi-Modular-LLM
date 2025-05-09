@@ -14,7 +14,6 @@ from tqdm import tqdm
 
 class TransformerTrainer:
     def __init__(self, config):
-        print(f"[TransformerTrainer DEBUG] dataset_name = {config['dataset_name']}, dataset_config = {config.get('dataset_config')}")
         self.config = config
         self.config["__model_name__"] = "GPTBackbone"
         self.config["__data_mode__"] = "streaming" if config.get("use_streaming", False) else "local"
@@ -50,14 +49,12 @@ class TransformerTrainer:
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.log_path = self.log_dir / "train_log.csv"
 
-        print(f"TransformerTrainer DEBUG, config-use_streaming: {config.get('use_streaming', False)}")
         if config.get("use_streaming", False):
             from utils.streaming_dataset import StreamingTextDataset
             print(f"[INFO] Using Hugging Face streaming dataset: {config['dataset_name']}")
             dataset_config = config["dataset_config"]
             split = config.get("split", "train")
             dataset_name = config["dataset_name"]
-            print(f"[DEBUG] Loading dataset: {dataset_name} | config: {dataset_config} | split: {split}")
             self.dataset = StreamingTextDataset(
                 dataset_name=dataset_name,
                 tokenizer=self.tokenizer,
@@ -130,13 +127,13 @@ class TransformerTrainer:
             progress_bar.set_postfix(loss=f"{avg_loss_so_far:.4f}")
         avg_loss = total_loss / num_batches
         perplexity = torch.exp(torch.tensor(avg_loss)).item()
-        print(f"📉 Validation — Avg Loss: {avg_loss:.4f} | Perplexity: {perplexity:.2f}")
+        print(f"Validation — Avg Loss: {avg_loss:.4f} | Perplexity: {perplexity:.2f}")
         return avg_loss, perplexity
 
     def train(self):
         for epoch in range(1, self.config["epochs"] + 1):
             train_losses = []
-            print(f"\n🔁 Epoch {epoch}/{self.config['epochs']}")
+            print(f"\nEpoch {epoch}/{self.config['epochs']}")
             max_batches = self.config.get("max_train_batches")
             total_batches = max_batches if max_batches is not None else None
             progress_bar = tqdm(enumerate(self.dataloader), total=total_batches, desc="Training", leave=False)
