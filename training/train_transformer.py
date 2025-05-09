@@ -137,11 +137,12 @@ class TransformerTrainer:
         for epoch in range(1, self.config["epochs"] + 1):
             train_losses = []
             print(f"\n🔁 Epoch {epoch}/{self.config['epochs']}")
-            total_batches = self.config.get("max_train_batches") or len(self.dataloader)
+            max_batches = self.config.get("max_train_batches")
+            total_batches = max_batches if max_batches is not None else None
             progress_bar = tqdm(enumerate(self.dataloader), total=total_batches, desc="Training", leave=False)
 
             for i, input_ids in progress_bar:
-                if self.config.get("max_train_batches") is not None and i >= self.config["max_train_batches"]:
+                if max_batches is not None and i >= max_batches:
                     break
                 input_ids = input_ids.to(self.device)
                 train_loss = self.train_step(input_ids)
@@ -151,7 +152,8 @@ class TransformerTrainer:
 
             avg_train_loss = sum(train_losses) / len(train_losses)
             eval_loss, perplexity = self.evaluate()
-            print(f"✅ Epoch {epoch} Complete — Train Loss: {avg_train_loss:.4f}, Eval Loss: {eval_loss:.4f}, Perplexity: {perplexity:.2f}")
+            print(
+                f"Epoch {epoch} Complete — Train Loss: {avg_train_loss:.4f}, Eval Loss: {eval_loss:.4f}, Perplexity: {perplexity:.2f}")
             self.save_checkpoint(epoch, avg_train_loss)
             self.log_metrics(epoch, avg_train_loss, eval_loss, perplexity)
             self.scheduler.step()
