@@ -8,7 +8,7 @@ class StreamingTextDataset(IterableDataset):
         self.split = split
         self.dataset = load_dataset(
             path=dataset_name,
-            name=dataset_config or "20220301.aa",
+            name="20220301.aa" if dataset_config is None else dataset_config,
             split=self.split,
             streaming=True,
             trust_remote_code=True
