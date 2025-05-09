@@ -34,6 +34,11 @@ class TransformerTrainer:
         self.model = self._build_model()
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = optim.AdamW(self.model.parameters(), lr=config["lr"])
+        self.scheduler = torch.optim.lr_scheduler.StepLR(
+            self.optimizer,
+            step_size=config.get("lr_step_size", 2),
+            gamma=config.get("lr_gamma", 0.5)
+        )
 
         self.project_root = Path(__file__).resolve().parents[1]
         self.ckpt_dir = self.project_root / config["ckpt_dir"]
@@ -111,10 +116,7 @@ class TransformerTrainer:
     def evaluate(self, num_batches=None):
         self.model.eval()
         total_loss = 0
-
-        # Respect config override or default to 5
         num_batches = num_batches or self.config.get("max_eval_batches") or 5
-
         for i, input_ids in enumerate(self.dataloader):
             if i >= num_batches:
                 break
@@ -122,7 +124,6 @@ class TransformerTrainer:
             logits = self.model(input_ids)
             loss = self.criterion(logits.view(-1, logits.size(-1)), input_ids.view(-1))
             total_loss += loss.item()
-
         avg_loss = total_loss / num_batches
         perplexity = torch.exp(torch.tensor(avg_loss)).item()
         print(f"Validation Loss: {avg_loss:.4f} | Perplexity: {perplexity:.2f}")
@@ -142,6 +143,8 @@ class TransformerTrainer:
             print(f"Epoch {epoch}/{self.config['epochs']} - Train Loss: {avg_train_loss:.4f} - Eval Loss: {eval_loss:.4f} - Perplexity: {perplexity:.2f}")
             self.save_checkpoint(epoch, avg_train_loss)
             self.log_metrics(epoch, avg_train_loss, eval_loss, perplexity)
+            self.scheduler.step()
+            print(f"[DEBUG] LR after epoch {epoch}: {self.scheduler.get_last_lr()[0]:.6f}")
 
 
 def get_config():
@@ -159,11 +162,13 @@ def get_config():
         "dataset_path": "data/train.txt",
         "dataset_name": "wikipedia",
         "dataset_config": "20220301.en",
-        "split": "train",  # for quick testing, optional
+        "split": "train",
         "use_streaming": True,
         "device": "cuda" if torch.cuda.is_available() else "cpu",
         "max_train_batches": None,
-        "max_eval_batches": None
+        "max_eval_batches": None,
+        "lr_step_size": 2,
+        "lr_gamma": 0.5
     }
 
 
@@ -171,4 +176,3 @@ if __name__ == "__main__":
     import sys
     print("[WARN] Do not run this as a script directly. Use from Colab or external launcher.")
     sys.exit(1)
-
