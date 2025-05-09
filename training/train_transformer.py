@@ -13,7 +13,10 @@ from datetime import datetime
 
 class TransformerTrainer:
     def __init__(self, config):
-        print(f"[COLAB DEBUG] dataset_name = {config['dataset_name']}, dataset_config = {config.get('dataset_config')}")
+        try:
+            print(f"[COLAB DEBUG] dataset_name = {config['dataset_name']}, dataset_config = {config.get('dataset_config')}")
+        except Exception as e:
+            print(f"DID NOT PRINT [COLAB DEBUG]: {e}")
         self.config = config
         self.config["__model_name__"] = "GPTBackbone"
         self.config["__data_mode__"] = "streaming" if config.get("use_streaming", False) else "local"
