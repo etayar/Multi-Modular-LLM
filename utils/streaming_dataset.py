@@ -1,14 +1,15 @@
 from torch.utils.data import IterableDataset
 from datasets import load_dataset
-
+import torch
 
 class StreamingTextDataset(IterableDataset):
     def __init__(self, dataset_name, tokenizer, max_length=64, split="train", dataset_config=None):
         self.dataset = load_dataset(
-            dataset_name,
-            dataset_config,
+            path=dataset_name,
+            name=dataset_config,
             split=split,
-            streaming=True
+            streaming=True,
+            trust_remote_code=True  #  required for Wikipedia dataset
         )
         self.tokenizer = tokenizer
         self.max_length = max_length
@@ -25,4 +26,4 @@ class StreamingTextDataset(IterableDataset):
                 truncation=True,
                 max_length=self.max_length
             )
-            yield encoding["input_ids"].squeeze(0)  # shape: [max_length]
+            yield encoding["input_ids"].squeeze(0)
