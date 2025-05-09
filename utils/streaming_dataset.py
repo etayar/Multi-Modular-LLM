@@ -5,6 +5,9 @@ import torch
 
 class StreamingTextDataset(IterableDataset):
     def __init__(self, dataset_name, tokenizer, max_length=64, split="train", dataset_config=None):
+        if dataset_config is None:
+            raise ValueError("You must provide `dataset_config` when using streaming=True.")
+
         self.split = split
         self.dataset = load_dataset(
             path=dataset_name,
@@ -17,6 +20,7 @@ class StreamingTextDataset(IterableDataset):
         self.max_length = max_length
 
     def __iter__(self):
+        print(f"[DEBUG] __iter__ triggered with split: {self.split}")
         for example in self.dataset:
             text = example.get("text")
             if not text:
