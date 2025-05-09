@@ -25,6 +25,12 @@ class TransformerTrainer:
         self.config["__run_time__"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.device = config["device"]
         self.tokenizer = load_tokenizer()
+        true_vocab_size = self.tokenizer.vocab_size
+        if "vocab_size" in self.config and self.config["vocab_size"] < true_vocab_size:
+            print(
+                f"[WARN] Config vocab_size ({self.config['vocab_size']}) is smaller than tokenizer vocab size ({true_vocab_size}). Updating.")
+        self.config["vocab_size"] = true_vocab_size
+
         self.model = self._build_model()
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = optim.AdamW(self.model.parameters(), lr=config["lr"])
