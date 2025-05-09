@@ -38,6 +38,7 @@ class TransformerTrainer:
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.log_path = self.log_dir / "train_log.csv"
 
+        print(f"TransformerTrainer DEBUG, config-use_streaming: {config.get('use_streaming', False)}")
         if config.get("use_streaming", False):
             from utils.streaming_dataset import StreamingTextDataset
             print(f"[INFO] Using Hugging Face streaming dataset: {config['dataset_name']}")
