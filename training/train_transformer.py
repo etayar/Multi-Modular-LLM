@@ -40,7 +40,7 @@ class TransformerTrainer:
         if config.get("use_streaming", False):
             from utils.streaming_dataset import StreamingTextDataset
             print(f"[INFO] Using Hugging Face streaming dataset: {config['dataset_name']}")
-            dataset_config = config.get("dataset_config", None)
+            dataset_config = config["dataset_config"]
             split = config.get("split", "train")
             self.dataset = StreamingTextDataset(
                 config["dataset_name"],
