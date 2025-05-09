@@ -155,6 +155,7 @@ def get_config():
 
 
 if __name__ == "__main__":
-    config = get_config()
-    trainer = TransformerTrainer(config)
-    trainer.train()
+    import sys
+    print("[WARN] Do not run this as a script directly. Use from Colab or external launcher.")
+    sys.exit(1)
+
