@@ -1,11 +1,15 @@
 from torch.utils.data import IterableDataset
 from datasets import load_dataset
-import torch
 
 
 class StreamingTextDataset(IterableDataset):
-    def __init__(self, dataset_name, tokenizer, max_length=64, split="train"):
-        self.dataset = load_dataset(dataset_name, split=split, streaming=True)
+    def __init__(self, dataset_name, tokenizer, max_length=64, split="train", dataset_config=None):
+        self.dataset = load_dataset(
+            dataset_name,
+            dataset_config,
+            split=split,
+            streaming=True
+        )
         self.tokenizer = tokenizer
         self.max_length = max_length
 

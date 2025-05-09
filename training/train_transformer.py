@@ -40,7 +40,8 @@ class TransformerTrainer:
         if config.get("use_streaming", False):
             from utils.streaming_dataset import StreamingTextDataset
             print(f"[INFO] Using Hugging Face streaming dataset: {config['dataset_name']}")
-            self.dataset = StreamingTextDataset(config["dataset_name"], self.tokenizer, max_length=config["max_len"])
+            dataset_config = config.get("dataset_config", None)
+            self.dataset = StreamingTextDataset(config["dataset_name"], self.tokenizer, max_length=config["max_len"], dataset_config=dataset_config)
         else:
             from utils.dataset import TextDataset
             print(f"[INFO] Using local text dataset from: {self.data_path}")
@@ -133,6 +134,7 @@ def get_config():
         "ckpt_dir": "checkpoints",
         "dataset_path": "data/train.txt",
         "dataset_name": "wikipedia",
+        "dataset_config": "20220301.en",  # ✅ ADD THIS LINE
         "use_streaming": False,
         "device": "cuda" if torch.cuda.is_available() else "cpu"
     }
