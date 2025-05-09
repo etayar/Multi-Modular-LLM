@@ -143,7 +143,7 @@ def get_config():
         "dataset_name": "wikipedia",
         "dataset_config": "20220301.aa",
         "split": "train[:1%]",  # for quick testing, optional
-        "use_streaming": False,
+        "use_streaming": True,
         "device": "cuda" if torch.cuda.is_available() else "cpu"
     }
 
