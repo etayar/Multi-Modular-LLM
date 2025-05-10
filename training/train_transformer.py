@@ -172,14 +172,23 @@ class TransformerTrainer:
             print(f"[DEBUG] LR after epoch {epoch}: {self.scheduler.get_last_lr()[0]:.6f}")
 
 
-def get_config():
+def get_config(preset="base"):
+    presets = {
+        "micro":  {"embed_dim": 64,  "num_heads": 2,  "num_layers": 1},
+        "tiny":   {"embed_dim": 128, "num_heads": 4,  "num_layers": 2},
+        "small":  {"embed_dim": 192, "num_heads": 6,  "num_layers": 4},
+        "base":   {"embed_dim": 256, "num_heads": 8,  "num_layers": 6},
+        "medium": {"embed_dim": 512, "num_heads": 8,  "num_layers": 8},
+        "large":  {"embed_dim": 512, "num_heads": 8,  "num_layers": 12},
+        "xlarge": {"embed_dim": 768, "num_heads": 12, "num_layers": 24}
+    }
+
+    assert preset in presets, f"Invalid preset '{preset}'. Choose from: {list(presets.keys())}"
+
     return {
         "vocab_size": 1000,
         "max_len": 64,
         "batch_size": 4,
-        "embed_dim": 128,
-        "num_heads": 4,
-        "num_layers": 2,
         "lr": 1e-4,
         "epochs": 5,
         "log_dir": "logs",
@@ -195,7 +204,8 @@ def get_config():
         "lr_step_size": 2,
         "lr_gamma": 0.5,
         "load_last_cp": True,
-        "__model_name__": "GPTBackbone"
+        "__model_name__": "GPTBackbone",
+        **presets[preset]
     }
 
 
