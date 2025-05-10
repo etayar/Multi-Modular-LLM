@@ -15,7 +15,6 @@ from tqdm import tqdm
 class TransformerTrainer:
     def __init__(self, config):
         self.config = config
-        self.config["__model_name__"] = "GPTBackbone"
         self.config["__data_mode__"] = "streaming" if config.get("use_streaming", False) else "local"
         try:
             commit_hash = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode().strip()
@@ -48,6 +47,19 @@ class TransformerTrainer:
         self.ckpt_dir.mkdir(parents=True, exist_ok=True)
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.log_path = self.log_dir / "train_log.csv"
+
+        # Resume from checkpoint if requested
+        self.start_epoch = 1  # default
+        if config.get("load_last_cp", False):
+            ckpts = list(self.ckpt_dir.glob(f"{self.config['__model_name__']}_{self.config['dataset_name']}_epoch_*.pt"))
+            if ckpts:
+                latest_ckpt = sorted(ckpts)[-1]
+                print(f"[INFO] Loading checkpoint from: {latest_ckpt.name}")
+                checkpoint = torch.load(latest_ckpt, map_location=self.device)
+                self.model.load_state_dict(checkpoint["model_state_dict"])
+                self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+                self.start_epoch = checkpoint["epoch"] + 1
+                print(f"[INFO] Resuming from epoch {self.start_epoch}")
 
         if config.get("use_streaming", False):
             from utils.streaming_dataset import StreamingTextDataset
@@ -91,7 +103,9 @@ class TransformerTrainer:
 
     def save_checkpoint(self, epoch, loss):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        ckpt_path = self.ckpt_dir / f"checkpoint_epoch_{epoch:03d}_{timestamp}.pt"
+        model_name = self.config.get("__model_name__", "model")
+        dataset_name = self.config.get("dataset_name", "dataset")
+        ckpt_path = self.ckpt_dir / f"{model_name}_{dataset_name}_epoch_{epoch:03d}_{timestamp}.pt"
         torch.save({
             "epoch": epoch,
             "model_state_dict": self.model.state_dict(),
@@ -99,7 +113,8 @@ class TransformerTrainer:
             "loss": loss,
             "config": self.config
         }, ckpt_path)
-        print(f"✅ Checkpoint saved: {ckpt_path}")
+        print(f"Checkpoint saved: {ckpt_path}")
+
 
     def log_metrics(self, epoch, train_loss, eval_loss, perplexity):
         self.config["__data_mode__"] = "streaming" if self.config.get("use_streaming", False) else "local"
@@ -131,7 +146,7 @@ class TransformerTrainer:
         return avg_loss, perplexity
 
     def train(self):
-        for epoch in range(1, self.config["epochs"] + 1):
+        for epoch in range(self.start_epoch, self.config["epochs"] + 1):
             train_losses = []
             print(f"\nEpoch {epoch}/{self.config['epochs']}")
             max_batches = self.config.get("max_train_batches")
@@ -178,7 +193,9 @@ def get_config():
         "max_train_batches": None,
         "max_eval_batches": None,
         "lr_step_size": 2,
-        "lr_gamma": 0.5
+        "lr_gamma": 0.5,
+        "load_last_cp": True,
+        "__model_name__": "GPTBackbone"
     }
 
 
