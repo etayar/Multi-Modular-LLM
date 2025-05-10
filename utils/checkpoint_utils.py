@@ -17,11 +17,17 @@ def list_checkpoints(model_name: str, dataset_name: str, ckpt_dir: str) -> List[
 
 # Example usage:
 if __name__ == "__main__":
-    '''
-    !python utils/checkpoint_utils.py
-    '''
     model = "GPTBackbone"
     dataset = "wikipedia"
-    ckpts = list_checkpoints(model, dataset, "checkpoints")
-    for ckpt in ckpts:
-        print(ckpt.name)
+    ckpt_dir = "checkpoints"
+
+    print(f"Looking for checkpoints in: {ckpt_dir}")
+    ckpts = list_checkpoints(model, dataset, ckpt_dir)
+
+    if not ckpts:
+        print("⚠️ No checkpoints found.")
+    else:
+        print("\nAvailable checkpoints:")
+        for ckpt in ckpts:
+            print(" -", ckpt.name)
+
