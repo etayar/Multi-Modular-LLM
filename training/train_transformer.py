@@ -50,11 +50,27 @@ class TransformerTrainer:
 
         # Resume from checkpoint if requested
         self.start_epoch = 1  # default
-        if config.get("load_last_cp", False):
-            ckpts = list(self.ckpt_dir.glob(f"{self.config['__model_name__']}_{self.config['dataset_name']}_epoch_*.pt"))
+
+        resume_path = config.get("resume_from")
+        if resume_path:
+            ckpt_path = Path(resume_path)
+            if not ckpt_path.is_absolute():
+                ckpt_path = self.ckpt_dir / ckpt_path
+            if ckpt_path.exists():
+                print(f"[INFO] Loading checkpoint from: {ckpt_path.name}")
+                checkpoint = torch.load(ckpt_path, map_location=self.device)
+                self.model.load_state_dict(checkpoint["model_state_dict"])
+                self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+                self.start_epoch = checkpoint["epoch"] + 1
+                print(f"[INFO] Resuming from epoch {self.start_epoch}")
+            else:
+                print(f"[WARN] Specified checkpoint not found: {ckpt_path}")
+
+        elif config.get("load_last_cp", False):
+            ckpts = list(self.ckpt_dir.glob("*.pt"))  # relaxed pattern
             if ckpts:
                 latest_ckpt = sorted(ckpts)[-1]
-                print(f"[INFO] Loading checkpoint from: {latest_ckpt.name}")
+                print(f"[INFO] Loading latest checkpoint: {latest_ckpt.name}")
                 checkpoint = torch.load(latest_ckpt, map_location=self.device)
                 self.model.load_state_dict(checkpoint["model_state_dict"])
                 self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
@@ -204,6 +220,7 @@ def get_config(preset="base"):
         "lr_step_size": 2,
         "lr_gamma": 0.5,
         "load_last_cp": True,
+        "resume_from": None,
         "__model_name__": "GPTBackbone",
         **presets[preset]
     }
