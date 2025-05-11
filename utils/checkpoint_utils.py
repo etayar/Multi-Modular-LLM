@@ -7,7 +7,7 @@ def list_all_checkpoints(ckpt_dir: str) -> List[Path]:
     Works in any environment (Colab, local, server).
     """
     try:
-        base_dir = Path(__file__).resolve().parent
+        base_dir = Path(__file__).resolve().parent.parent
     except NameError:
         base_dir = Path.cwd()
 
