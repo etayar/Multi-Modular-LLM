@@ -103,18 +103,22 @@ class TransformerTrainer:
             print(f"[INFO] Using local text dataset from: {self.data_path}")
             self.dataset = TextDataset(str(self.data_path), self.tokenizer, max_length=config["max_len"])
 
+        # Initialize DataLoader
         self.dataloader = DataLoader(
             self.dataset,
             batch_size=self.config["batch_size"],
             shuffle=not config.get("use_streaming", False),
-            num_workers=0  # Explicitly set to avoid multiprocessing issues with web crawling
+            num_workers=0
         )
 
-        # Safe scheduler setup for both iterable and map-style datasets
-        try:
-            total_steps = self.config["epochs"] * len(self.dataloader)
-        except TypeError:
-            total_steps = 10000  # fallback estimate or configurable default
+        # Delay scheduler setup until after dataloader exists
+        if hasattr(self.dataloader, '__len__'):
+            try:
+                total_steps = self.config["epochs"] * len(self.dataloader)
+            except TypeError:
+                total_steps = 10000  # fallback for streaming datasets
+        else:
+            total_steps = 10000  # streaming fallback
 
         warmup_steps = int(0.1 * total_steps)
 
