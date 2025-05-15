@@ -27,12 +27,18 @@ class WebCrawlStreamDataset(IterableDataset):
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.delay = delay
+        self.failed_urls = set()
 
     def __iter__(self):
         for url in self.urls:
+            if url in self.failed_urls:
+                print(f"[!] Skipping known bad URL: {url}")
+                continue
+
             print(f"[*] Crawling: {url}")
             text = fetch_and_clean(url)
             if not text:
+                self.failed_urls.add(url)
                 continue
 
             encoding = self.tokenizer(
@@ -43,9 +49,9 @@ class WebCrawlStreamDataset(IterableDataset):
                 max_length=self.max_length
             )
 
-            # Skip empty tokenized outputs
             if encoding["input_ids"].nelement() == 0:
                 print(f"[!] Skipping empty encoding for: {url}")
+                self.failed_urls.add(url)
                 continue
 
             time.sleep(self.delay)
