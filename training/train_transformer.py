@@ -12,6 +12,7 @@ from datetime import datetime
 from tqdm import tqdm
 from transformers import get_cosine_schedule_with_warmup
 from torch.utils.tensorboard import SummaryWriter
+from torch.utils.data import IterableDataset
 
 
 class TransformerTrainer:
@@ -112,13 +113,10 @@ class TransformerTrainer:
         )
 
         # Delay scheduler setup until after dataloader exists
-        if hasattr(self.dataloader, '__len__'):
-            try:
-                total_steps = self.config["epochs"] * len(self.dataloader)
-            except TypeError:
-                total_steps = 10000  # fallback for streaming datasets
+        if not isinstance(self.dataset, IterableDataset):
+            total_steps = self.config["epochs"] * len(self.dataloader)
         else:
-            total_steps = 10000  # streaming fallback
+            total_steps = 10000  # fallback for streaming datasets
 
         warmup_steps = int(0.1 * total_steps)
 
