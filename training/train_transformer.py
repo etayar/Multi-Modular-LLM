@@ -110,9 +110,13 @@ class TransformerTrainer:
             num_workers=0  # Explicitly set to avoid multiprocessing issues with web crawling
         )
 
-        # Calculate total steps (roughly)
-        total_steps = self.config["epochs"] * len(self.dataloader)
-        warmup_steps = int(0.1 * total_steps)  # e.g. 10% warmup
+        # Safe scheduler setup for both iterable and map-style datasets
+        try:
+            total_steps = self.config["epochs"] * len(self.dataloader)
+        except TypeError:
+            total_steps = 10000  # fallback estimate or configurable default
+
+        warmup_steps = int(0.1 * total_steps)
 
         self.scheduler = get_cosine_schedule_with_warmup(
             self.optimizer,
