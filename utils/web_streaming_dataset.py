@@ -24,7 +24,7 @@ def fetch_and_clean(url):
 
 class WebCrawlStreamDataset(IterableDataset):
     def __init__(self, urls, tokenizer, max_length=64, delay=1.0, shuffle_each_epoch=True):
-        self.urls = urls
+        self.all_urls = urls
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.delay = delay
@@ -32,18 +32,15 @@ class WebCrawlStreamDataset(IterableDataset):
         self.failed_urls = set()
 
     def __iter__(self):
-        # Make a fresh copy each epoch
-        urls = [url for url in self.urls if url not in self.failed_urls]
-
+        urls = [u for u in self.all_urls if u not in self.failed_urls]
         if self.shuffle_each_epoch:
             random.shuffle(urls)
 
         for url in urls:
             print(f"[*] Crawling: {url}")
             text = fetch_and_clean(url)
-
             if not text:
-                print(f"[!] Skipping empty or failed text from: {url}")
+                print(f"[!] Skipping: {url} (empty)")
                 self.failed_urls.add(url)
                 continue
 
@@ -57,9 +54,8 @@ class WebCrawlStreamDataset(IterableDataset):
 
             input_ids = encoding.get("input_ids")
             attention_mask = encoding.get("attention_mask")
-
             if input_ids is None or attention_mask is None:
-                print(f"[!] Tokenization failed for: {url}")
+                print(f"[!] Tokenization failed: {url}")
                 self.failed_urls.add(url)
                 continue
 
