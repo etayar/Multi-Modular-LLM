@@ -10,7 +10,7 @@ import csv
 import subprocess
 from datetime import datetime
 from tqdm import tqdm
-from transformers import get_cosine_schedule_with_warmup
+from torch.optim.lr_scheduler import ExponentialLR
 from torch.utils.tensorboard import SummaryWriter
 
 
@@ -95,20 +95,7 @@ class TransformerTrainer:
             num_workers=0
         )
 
-        try:
-            total_steps = self.config["epochs"] * len(self.dataloader)
-        except TypeError:
-            total_steps = 10000
-            print("[WARN] Could not determine dataset length; using fallback total_steps = 10000")
-
-        warmup_steps = int(0.1 * total_steps)
-
-        self.scheduler = get_cosine_schedule_with_warmup(
-            self.optimizer,
-            num_warmup_steps=warmup_steps,
-            num_training_steps=total_steps
-        )
-
+        self.scheduler = ExponentialLR(self.optimizer, gamma=0.95)
         self.tb_writer = SummaryWriter(log_dir=str(self.log_dir / "tensorboard"))
 
     def _build_model(self):
@@ -271,7 +258,6 @@ def get_config(preset="base"):
         "crawl_delay": 1.0,
         **presets[preset]
     }
-
 
 
 if __name__ == "__main__":
