@@ -23,15 +23,18 @@ def fetch_and_clean(url):
 
 
 class WebCrawlStreamDataset(IterableDataset):
-    def __init__(self, urls, tokenizer, max_length=64, delay=1.0):
+    def __init__(self, urls, tokenizer, max_length=64, delay=1.0, shuffle_each_epoch=True):
         self.urls = urls
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.delay = delay
+        self.shuffle_each_epoch = shuffle_each_epoch
 
     def __iter__(self):
-        while True:
-            url = random.choice(self.urls)
+        if self.shuffle_each_epoch:
+            random.shuffle(self.urls[:])
+
+        for url in self.urls[:]:
             print(f"[*] Crawling: {url}")
             text = fetch_and_clean(url)
             if not text:
