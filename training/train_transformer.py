@@ -247,16 +247,30 @@ def get_config(preset="base"):
         "load_last_cp": True,
         "resume_from": None,
         "__model_name__": "GPTBackbone",
-        "webcrawl_urls": [
-            "https://en.wikipedia.org/wiki/Transformer_(machine_learning)",
-            "https://en.wikipedia.org/wiki/History_of_mathematics",
-            "https://en.wikipedia.org/wiki/Physics",
-            "https://www.bbc.com/news/world-asia-68838588",
-            "https://www.bbc.com/news/science-environment-68820146",
-            "https://www.bbc.com/news/technology-68812335"
-        ],
         "crawl_delay": 1.0,
-        **presets[preset]
+        **presets[preset],
+        "webcrawl_urls": [
+            "https://www.bbc.com/news/world",
+            "https://www.bbc.com/news/science_and_environment",
+            "https://www.bbc.com/news/technology",
+            "https://www.nytimes.com/section/world",
+            "https://www.nytimes.com/section/science",
+            "https://www.reuters.com/news/archive/worldNews",
+            "https://www.theguardian.com/world",
+            "https://www.theguardian.com/science",
+            "https://www.npr.org/sections/news/",
+            "https://www.aljazeera.com/news",
+            "https://arxiv.org/list/cs/new",
+            "https://arxiv.org/list/stat/new",
+            "https://www.nature.com/nature/articles",
+            "https://journals.plos.org/plosone/browse",
+            "https://pubmed.ncbi.nlm.nih.gov/?term=machine+learning",
+            "https://www.sciencedaily.com/news/computers_math/artificial_intelligence/",
+            "https://www.gutenberg.org/ebooks/1342",
+            "https://www.gutenberg.org/ebooks/84",
+            "https://standardebooks.org/ebooks/mark-twain/the-adventures-of-tom-sawyer",
+            "https://standardebooks.org/ebooks/mary-shelley/frankenstein"
+        ]
     }
 
 
