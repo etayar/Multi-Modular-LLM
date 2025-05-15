@@ -184,8 +184,13 @@ class TransformerTrainer:
             max_batches = self.config.get("max_train_batches")
             total_batches = max_batches if max_batches is not None else None
             progress_bar = tqdm(enumerate(self.dataloader), total=total_batches, desc="Training", leave=False)
+            print("[DEBUG] Starting training loop, waiting for first batch...")
 
             for i, batch in progress_bar:
+                print(
+                    f"[DEBUG] Got batch {i} with shape: input_ids={batch['input_ids'].shape}, attention_mask={batch['attention_mask'].shape}"
+                )
+
                 if max_batches is not None and i >= max_batches:
                     break
                 try:

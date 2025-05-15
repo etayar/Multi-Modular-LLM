@@ -70,7 +70,7 @@ class WebCrawlStreamDataset(IterableDataset):
                 chunk_ids = input_ids[i:i + self.max_length]
                 chunk_mask = attention_mask[i:i + self.max_length]
 
-                print(f"[YIELD] Chunk from {url}: token_ids = {chunk_ids.tolist()[:5]}")
+                print(f"[YIELD] Chunk from {url} (start idx: {i}) — tokens: {chunk_ids.tolist()[:5]}")
 
                 yield {
                     "input_ids": chunk_ids,
