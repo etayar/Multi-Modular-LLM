@@ -10,6 +10,8 @@ import csv
 import subprocess
 from datetime import datetime
 from tqdm import tqdm
+from transformers import get_cosine_schedule_with_warmup
+from torch.utils.tensorboard import SummaryWriter
 
 
 class TransformerTrainer:
@@ -33,10 +35,15 @@ class TransformerTrainer:
         self.model = self._build_model()
         self.criterion = nn.CrossEntropyLoss(ignore_index=self.tokenizer.pad_token_id)
         self.optimizer = optim.AdamW(self.model.parameters(), lr=config["lr"])
-        self.scheduler = torch.optim.lr_scheduler.StepLR(
+
+        # Calculate total steps (roughly)
+        total_steps = self.config["epochs"] * len(self.dataloader)
+        warmup_steps = int(0.1 * total_steps)  # e.g. 10% warmup
+
+        self.scheduler = get_cosine_schedule_with_warmup(
             self.optimizer,
-            step_size=config.get("lr_step_size", 2),
-            gamma=config.get("lr_gamma", 0.5)
+            num_warmup_steps=warmup_steps,
+            num_training_steps=total_steps
         )
 
         self.project_root = Path(__file__).resolve().parents[1]
@@ -111,6 +118,8 @@ class TransformerTrainer:
             num_workers=0  # Explicitly set to avoid multiprocessing issues with web crawling
         )
 
+        self.tb_writer = SummaryWriter(log_dir=str(self.log_dir / "tensorboard"))
+
     def _build_model(self):
         dropout = self.config.get("dropout")
         model = GPTBackbone(
@@ -132,6 +141,7 @@ class TransformerTrainer:
         loss = self.criterion(logits.view(-1, logits.size(-1)), input_ids.view(-1))
         self.optimizer.zero_grad()
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
         self.optimizer.step()
         return loss.item()
 
@@ -214,6 +224,12 @@ class TransformerTrainer:
             self.log_metrics(epoch, avg_train_loss, eval_loss, perplexity)
             self.scheduler.step()
             print(f"[DEBUG] LR after epoch {epoch}: {self.scheduler.get_last_lr()[0]:.6f}")
+
+            self.tb_writer.add_scalar("Loss/train", avg_train_loss, epoch)
+            self.tb_writer.add_scalar("Loss/eval", eval_loss, epoch)
+            self.tb_writer.add_scalar("Perplexity/eval", perplexity, epoch)
+
+        self.tb_writer.close()
 
 
 def get_config(preset="base"):
