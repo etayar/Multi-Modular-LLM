@@ -112,12 +112,14 @@ class TransformerTrainer:
         )
 
     def _build_model(self):
+        dropout = self.config.get("dropout")
         model = GPTBackbone(
             vocab_size=self.config["vocab_size"],
             max_len=self.config["max_len"],
             embed_dim=self.config["embed_dim"],
             num_heads=self.config["num_heads"],
-            num_layers=self.config["num_layers"]
+            num_layers=self.config["num_layers"],
+            dropout= dropout if dropout else 0.15
         )
         print(f"Model initialized with {count_parameters(model):,} parameters.")
         return model.to(self.device)
@@ -230,7 +232,8 @@ def get_config(preset="base"):
     return {
         "vocab_size": 1000,
         "max_len": 64,
-        "batch_size": 4,
+        "batch_size": 64,
+        "dropout": 0.2,
         "lr": 1e-4,
         "epochs": 5,
         "log_dir": "logs",
