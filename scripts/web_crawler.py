@@ -31,7 +31,7 @@ def crawl(urls, output_path):
             if text:
                 f.write(text + "\n")
             time.sleep(1)  # be polite
-    print(f"✅ Crawl complete. Data saved to: {output_path}")
+    print(f"Crawl complete. Data saved to: {output_path}")
 
 
 def main():

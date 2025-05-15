@@ -31,7 +31,7 @@ class TransformerTrainer:
         self.config["vocab_size"] = true_vocab_size
 
         self.model = self._build_model()
-        self.criterion = nn.CrossEntropyLoss()
+        self.criterion = nn.CrossEntropyLoss(ignore_index=self.tokenizer.pad_token_id)
         self.optimizer = optim.AdamW(self.model.parameters(), lr=config["lr"])
         self.scheduler = torch.optim.lr_scheduler.StepLR(
             self.optimizer,
@@ -78,24 +78,38 @@ class TransformerTrainer:
                 print(f"[INFO] Resuming from epoch {self.start_epoch}")
 
         if config.get("use_streaming", False):
-            from utils.streaming_dataset import StreamingTextDataset
-            print(f"[INFO] Using Hugging Face streaming dataset: {config['dataset_name']}")
-            dataset_config = config["dataset_config"]
-            split = config.get("split", "train")
             dataset_name = config["dataset_name"]
-            self.dataset = StreamingTextDataset(
-                dataset_name=dataset_name,
-                tokenizer=self.tokenizer,
-                max_length=config["max_len"],
-                dataset_config=dataset_config,
-                split=split
-            )
+
+            if dataset_name == "webcrawl":
+                from utils.web_streaming_dataset import WebCrawlStreamDataset
+                print(f"[INFO] Using WebCrawlStreamDataset (live crawling)")
+                self.dataset = WebCrawlStreamDataset(
+                    urls=config["webcrawl_urls"],
+                    tokenizer=self.tokenizer,
+                    max_length=config["max_len"],
+                    delay=config.get("crawl_delay", 1.0)
+                )
+            else:
+                from utils.streaming_dataset import StreamingTextDataset
+                print(f"[INFO] Using Hugging Face streaming dataset: {dataset_name}")
+                self.dataset = StreamingTextDataset(
+                    dataset_name=dataset_name,
+                    tokenizer=self.tokenizer,
+                    max_length=config["max_len"],
+                    dataset_config=config["dataset_config"],
+                    split=config.get("split", "train")
+                )
         else:
             from utils.dataset import TextDataset
             print(f"[INFO] Using local text dataset from: {self.data_path}")
             self.dataset = TextDataset(str(self.data_path), self.tokenizer, max_length=config["max_len"])
 
-        self.dataloader = DataLoader(self.dataset, batch_size=self.config["batch_size"], shuffle=not config.get("use_streaming", False))
+        self.dataloader = DataLoader(
+            self.dataset,
+            batch_size=self.config["batch_size"],
+            shuffle=not config.get("use_streaming", False),
+            num_workers=0  # Explicitly set to avoid multiprocessing issues with web crawling
+        )
 
     def _build_model(self):
         model = GPTBackbone(
@@ -108,9 +122,11 @@ class TransformerTrainer:
         print(f"Model initialized with {count_parameters(model):,} parameters.")
         return model.to(self.device)
 
-    def train_step(self, input_ids):
+    def train_step(self, batch):
         self.model.train()
-        logits = self.model(input_ids)
+        input_ids = batch["input_ids"].to(self.device)
+        attention_mask = batch["attention_mask"].to(self.device)
+        logits = self.model(input_ids, attention_mask=attention_mask)
         loss = self.criterion(logits.view(-1, logits.size(-1)), input_ids.view(-1))
         self.optimizer.zero_grad()
         loss.backward()
@@ -147,15 +163,22 @@ class TransformerTrainer:
         total_loss = 0
         num_batches = num_batches or self.config.get("max_eval_batches") or 5
         progress_bar = tqdm(enumerate(self.dataloader), total=num_batches, desc="Evaluating", leave=False)
-        for i, input_ids in progress_bar:
+
+        for i, batch in progress_bar:
             if i >= num_batches:
                 break
-            input_ids = input_ids.to(self.device)
-            logits = self.model(input_ids)
-            loss = self.criterion(logits.view(-1, logits.size(-1)), input_ids.view(-1))
-            total_loss += loss.item()
-            avg_loss_so_far = total_loss / (i + 1)
-            progress_bar.set_postfix(loss=f"{avg_loss_so_far:.4f}")
+            try:
+                input_ids = batch["input_ids"].to(self.device)
+                attention_mask = batch["attention_mask"].to(self.device)
+                logits = self.model(input_ids, attention_mask=attention_mask)
+                loss = self.criterion(logits.view(-1, logits.size(-1)), input_ids.view(-1))
+                total_loss += loss.item()
+                avg_loss_so_far = total_loss / (i + 1)
+                progress_bar.set_postfix(loss=f"{avg_loss_so_far:.4f}")
+            except Exception as e:
+                print(f"[WARN] Skipping eval batch {i} due to error: {e}")
+                continue
+
         avg_loss = total_loss / num_batches
         perplexity = torch.exp(torch.tensor(avg_loss)).item()
         print(f"Validation — Avg Loss: {avg_loss:.4f} | Perplexity: {perplexity:.2f}")
@@ -169,14 +192,17 @@ class TransformerTrainer:
             total_batches = max_batches if max_batches is not None else None
             progress_bar = tqdm(enumerate(self.dataloader), total=total_batches, desc="Training", leave=False)
 
-            for i, input_ids in progress_bar:
+            for i, batch in progress_bar:
                 if max_batches is not None and i >= max_batches:
                     break
-                input_ids = input_ids.to(self.device)
-                train_loss = self.train_step(input_ids)
-                train_losses.append(train_loss)
-                avg_train_loss = sum(train_losses) / len(train_losses)
-                progress_bar.set_postfix(loss=f"{avg_train_loss:.4f}")
+                try:
+                    train_loss = self.train_step(batch)
+                    train_losses.append(train_loss)
+                    avg_train_loss = sum(train_losses) / len(train_losses)
+                    progress_bar.set_postfix(loss=f"{avg_train_loss:.4f}")
+                except Exception as e:
+                    print(f"[WARN] Skipping batch {i} due to error: {e}")
+                    continue
 
             avg_train_loss = sum(train_losses) / len(train_losses)
             eval_loss, perplexity = self.evaluate()
@@ -222,8 +248,18 @@ def get_config(preset="base"):
         "load_last_cp": True,
         "resume_from": None,
         "__model_name__": "GPTBackbone",
+        "webcrawl_urls": [
+            "https://en.wikipedia.org/wiki/Transformer_(machine_learning)",
+            "https://en.wikipedia.org/wiki/History_of_mathematics",
+            "https://en.wikipedia.org/wiki/Physics",
+            "https://www.bbc.com/news/world-asia-68838588",
+            "https://www.bbc.com/news/science-environment-68820146",
+            "https://www.bbc.com/news/technology-68812335"
+        ],
+        "crawl_delay": 1.0,
         **presets[preset]
     }
+
 
 
 if __name__ == "__main__":
