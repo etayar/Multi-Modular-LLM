@@ -12,10 +12,23 @@ def clean_html(html):
 
 
 def fetch_and_clean(url):
+    headers = {
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64)"
+    }
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
-        return clean_html(response.text)
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        # Drop unwanted tags
+        for tag in soup(["script", "style", "header", "footer", "nav", "aside"]):
+            tag.decompose()
+
+        # Prefer article content
+        article = soup.find("article")
+        text = article.get_text(separator=" ", strip=True) if article else soup.get_text(separator=" ", strip=True)
+
+        return text if len(text) > 200 else None  # Filter short junk pages
     except Exception as e:
         print(f"[!] Failed to fetch {url}: {e}")
         return None

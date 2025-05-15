@@ -255,21 +255,15 @@ def get_config(preset="base"):
         "crawl_delay": 1.0,
         **presets[preset],
         "webcrawl_urls": [
-            "https://www.bbc.com/news/world",
-            "https://www.bbc.com/news/science_and_environment",
-            "https://www.bbc.com/news/technology",
-            "https://www.theguardian.com/world",
-            "https://www.theguardian.com/science",
-            "https://www.npr.org/sections/news/",
-            "https://www.aljazeera.com/news",
-            "https://arxiv.org/list/cs/new",
-            "https://arxiv.org/list/stat/new",
-            "https://www.nature.com/nature/articles",
-            "https://journals.plos.org/plosone/browse",
-            "https://www.gutenberg.org/ebooks/1342",
-            "https://www.gutenberg.org/ebooks/84",
-            "https://standardebooks.org/ebooks/mark-twain/the-adventures-of-tom-sawyer",
-            "https://standardebooks.org/ebooks/mary-shelley/frankenstein"
+            "https://www.bbc.com/news/world-68838588",
+            "https://www.bbc.com/news/technology-68812335",
+            "https://www.bbc.com/news/science-environment-68820146",
+            "https://www.theguardian.com/science/2024/apr/05/ai-and-medicine-research",
+            "https://www.npr.org/2024/04/10/1256719437/new-ai-tools-medical-diagnosis",
+            "https://www.aljazeera.com/news/2024/4/11/what-ai-means-for-the-global-south",
+            "https://www.nature.com/articles/s41586-023-06926-5",
+            "https://arxiv.org/abs/2405.01234",
+            "https://www.gutenberg.org/files/84/84-h/84-h.htm"  # Frankenstein
         ]
     }
 
