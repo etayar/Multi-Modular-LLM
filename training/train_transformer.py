@@ -105,12 +105,19 @@ class TransformerTrainer:
             self.dataset = TextDataset(str(self.data_path), self.tokenizer, max_length=config["max_len"])
 
         # Initialize DataLoader
-        self.dataloader = DataLoader(
-            self.dataset,
-            batch_size=self.config["batch_size"],
-            shuffle=not config.get("use_streaming", False),
-            num_workers=0
-        )
+        if isinstance(self.dataset, IterableDataset):
+            self.dataloader = DataLoader(
+                self.dataset,
+                batch_size=self.config["batch_size"],
+                num_workers=0
+            )
+        else:
+            self.dataloader = DataLoader(
+                self.dataset,
+                batch_size=self.config["batch_size"],
+                shuffle=not config.get("use_streaming", False),
+                num_workers=0
+            )
 
         # Delay scheduler setup until after dataloader exists
         if not isinstance(self.dataset, IterableDataset):
