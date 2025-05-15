@@ -30,6 +30,8 @@ class WebCrawlStreamDataset(IterableDataset):
         self.failed_urls = set()
 
     def __iter__(self):
+        successful = 0
+
         for url in self.urls:
             if url in self.failed_urls:
                 print(f"[!] Skipping known bad URL: {url}")
@@ -55,8 +57,13 @@ class WebCrawlStreamDataset(IterableDataset):
                 continue
 
             time.sleep(self.delay)
+            successful += 1
 
             yield {
                 "input_ids": encoding["input_ids"].squeeze(0),
                 "attention_mask": encoding["attention_mask"].squeeze(0)
             }
+
+        if successful == 0:
+            print("[!] WARNING: No successful crawls this epoch.")
+
