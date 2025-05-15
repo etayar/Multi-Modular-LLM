@@ -255,15 +255,13 @@ def get_config(preset="base"):
         "crawl_delay": 1.0,
         **presets[preset],
         "webcrawl_urls": [
-            "https://www.bbc.com/news/world-68838588",
-            "https://www.bbc.com/news/technology-68812335",
-            "https://www.bbc.com/news/science-environment-68820146",
-            "https://www.theguardian.com/science/2024/apr/05/ai-and-medicine-research",
-            "https://www.npr.org/2024/04/10/1256719437/new-ai-tools-medical-diagnosis",
-            "https://www.aljazeera.com/news/2024/4/11/what-ai-means-for-the-global-south",
-            "https://www.nature.com/articles/s41586-023-06926-5",
-            "https://arxiv.org/abs/2405.01234",
-            "https://www.gutenberg.org/files/84/84-h/84-h.htm"  # Frankenstein
+            "https://www.bbc.com/news/world-europe-68867750",
+            "https://www.theguardian.com/world/2024/may/01/ukraine-war-frontline-report",
+            "https://www.aljazeera.com/news/2024/5/14/gaza-ceasefire-latest",
+            "https://arxiv.org/abs/2405.01700",
+            "https://arxiv.org/abs/2405.00566",
+            "https://www.gutenberg.org/files/11/11-h/11-h.htm",  # Alice in Wonderland
+            "https://www.gutenberg.org/files/98/98-h/98-h.htm"    # A Tale of Two Cities
         ]
     }
 
