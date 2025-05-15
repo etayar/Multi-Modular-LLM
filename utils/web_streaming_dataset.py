@@ -1,8 +1,8 @@
 from torch.utils.data import IterableDataset
 import requests
 from bs4 import BeautifulSoup
-import random
 import time
+import random
 
 
 def clean_html(html):
@@ -29,15 +29,22 @@ class WebCrawlStreamDataset(IterableDataset):
         self.max_length = max_length
         self.delay = delay
         self.shuffle_each_epoch = shuffle_each_epoch
+        self.failed_urls = set()
 
     def __iter__(self):
-        if self.shuffle_each_epoch:
-            random.shuffle(self.urls[:])
+        # Make a fresh copy each epoch
+        urls = [url for url in self.urls if url not in self.failed_urls]
 
-        for url in self.urls[:]:
+        if self.shuffle_each_epoch:
+            random.shuffle(urls)
+
+        for url in urls:
             print(f"[*] Crawling: {url}")
             text = fetch_and_clean(url)
+
             if not text:
+                print(f"[!] Skipping empty or failed text from: {url}")
+                self.failed_urls.add(url)
                 continue
 
             encoding = self.tokenizer(
@@ -47,8 +54,18 @@ class WebCrawlStreamDataset(IterableDataset):
                 truncation=True,
                 max_length=self.max_length
             )
+
+            input_ids = encoding.get("input_ids")
+            attention_mask = encoding.get("attention_mask")
+
+            if input_ids is None or attention_mask is None:
+                print(f"[!] Tokenization failed for: {url}")
+                self.failed_urls.add(url)
+                continue
+
             time.sleep(self.delay)
+
             yield {
-                "input_ids": encoding["input_ids"].squeeze(0),
-                "attention_mask": encoding["attention_mask"].squeeze(0)
+                "input_ids": input_ids.squeeze(0),
+                "attention_mask": attention_mask.squeeze(0)
             }
