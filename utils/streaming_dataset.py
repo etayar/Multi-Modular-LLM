@@ -30,4 +30,7 @@ class StreamingTextDataset(IterableDataset):
                 truncation=True,
                 max_length=self.max_length
             )
-            yield encoding["input_ids"].squeeze(0)
+            yield {
+                "input_ids": encoding["input_ids"].squeeze(0),
+                "attention_mask": encoding["attention_mask"].squeeze(0)
+            }

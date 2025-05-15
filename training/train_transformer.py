@@ -12,7 +12,6 @@ from datetime import datetime
 from tqdm import tqdm
 from transformers import get_cosine_schedule_with_warmup
 from torch.utils.tensorboard import SummaryWriter
-from torch.utils.data import IterableDataset
 
 
 class TransformerTrainer:
@@ -29,8 +28,7 @@ class TransformerTrainer:
         self.tokenizer = load_tokenizer()
         true_vocab_size = self.tokenizer.vocab_size
         if "vocab_size" in self.config and self.config["vocab_size"] < true_vocab_size:
-            print(
-                f"[WARN] Config vocab_size ({self.config['vocab_size']}) is smaller than tokenizer vocab size ({true_vocab_size}). Updating.")
+            print(f"[WARN] Config vocab_size ({self.config['vocab_size']}) is smaller than tokenizer vocab size ({true_vocab_size}). Updating.")
         self.config["vocab_size"] = true_vocab_size
 
         self.model = self._build_model()
@@ -48,8 +46,7 @@ class TransformerTrainer:
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.log_path = self.log_dir / "train_log.csv"
 
-        # Resume from checkpoint if requested
-        self.start_epoch = 1  # default
+        self.start_epoch = 1
 
         resume_path = config.get("resume_from")
         if resume_path:
@@ -67,7 +64,7 @@ class TransformerTrainer:
                 print(f"[WARN] Specified checkpoint not found: {ckpt_path}")
 
         elif config.get("load_last_cp", False):
-            ckpts = list(self.ckpt_dir.glob("*.pt"))  # relaxed pattern
+            ckpts = list(self.ckpt_dir.glob("*.pt"))
             if ckpts:
                 latest_ckpt = sorted(ckpts)[-1]
                 print(f"[INFO] Loading latest checkpoint: {latest_ckpt.name}")
@@ -78,52 +75,31 @@ class TransformerTrainer:
                 print(f"[INFO] Resuming from epoch {self.start_epoch}")
 
         if config.get("use_streaming", False):
-            dataset_name = config["dataset_name"]
-
-            if dataset_name == "webcrawl":
-                from utils.web_streaming_dataset import WebCrawlStreamDataset
-                print(f"[INFO] Using WebCrawlStreamDataset (live crawling)")
-                self.dataset = WebCrawlStreamDataset(
-                    urls=config["webcrawl_urls"],
-                    tokenizer=self.tokenizer,
-                    max_length=config["max_len"],
-                    delay=config.get("crawl_delay", 1.0)
-                )
-            else:
-                from utils.streaming_dataset import StreamingTextDataset
-                print(f"[INFO] Using Hugging Face streaming dataset: {dataset_name}")
-                self.dataset = StreamingTextDataset(
-                    dataset_name=dataset_name,
-                    tokenizer=self.tokenizer,
-                    max_length=config["max_len"],
-                    dataset_config=config["dataset_config"],
-                    split=config.get("split", "train")
-                )
+            from utils.web_streaming_dataset import WebCrawlStreamDataset
+            print(f"[INFO] Using WebCrawlStreamDataset (live crawling)")
+            self.dataset = WebCrawlStreamDataset(
+                urls=config["webcrawl_urls"],
+                tokenizer=self.tokenizer,
+                max_length=config["max_len"],
+                delay=config.get("crawl_delay", 1.0)
+            )
         else:
             from utils.dataset import TextDataset
             print(f"[INFO] Using local text dataset from: {self.data_path}")
             self.dataset = TextDataset(str(self.data_path), self.tokenizer, max_length=config["max_len"])
 
-        # Initialize DataLoader
-        if isinstance(self.dataset, IterableDataset):
-            self.dataloader = DataLoader(
-                self.dataset,
-                batch_size=self.config["batch_size"],
-                num_workers=0
-            )
-        else:
-            self.dataloader = DataLoader(
-                self.dataset,
-                batch_size=self.config["batch_size"],
-                shuffle=not config.get("use_streaming", False),
-                num_workers=0
-            )
+        self.dataloader = DataLoader(
+            self.dataset,
+            batch_size=self.config["batch_size"],
+            shuffle=not config.get("use_streaming", False),
+            num_workers=0
+        )
 
-        # Delay scheduler setup until after dataloader exists
-        if not isinstance(self.dataset, IterableDataset):
+        try:
             total_steps = self.config["epochs"] * len(self.dataloader)
-        else:
-            total_steps = 10000  # fallback for streaming datasets
+        except TypeError:
+            total_steps = 10000
+            print("[WARN] Could not determine dataset length; using fallback total_steps = 10000")
 
         warmup_steps = int(0.1 * total_steps)
 
@@ -149,6 +125,10 @@ class TransformerTrainer:
         return model.to(self.device)
 
     def train_step(self, batch):
+
+        if "input_ids" not in batch or "attention_mask" not in batch:
+            raise ValueError("Missing input_ids or attention_mask in batch")
+
         self.model.train()
         input_ids = batch["input_ids"].to(self.device)
         attention_mask = batch["attention_mask"].to(self.device)
@@ -173,7 +153,6 @@ class TransformerTrainer:
             "config": self.config
         }, ckpt_path)
         print(f"Checkpoint saved: {ckpt_path}")
-
 
     def log_metrics(self, epoch, train_loss, eval_loss, perplexity):
         self.config["__data_mode__"] = "streaming" if self.config.get("use_streaming", False) else "local"
@@ -233,8 +212,7 @@ class TransformerTrainer:
 
             avg_train_loss = sum(train_losses) / len(train_losses)
             eval_loss, perplexity = self.evaluate()
-            print(
-                f"Epoch {epoch} Complete — Train Loss: {avg_train_loss:.4f}, Eval Loss: {eval_loss:.4f}, Perplexity: {perplexity:.2f}")
+            print(f"Epoch {epoch} Complete — Train Loss: {avg_train_loss:.4f}, Eval Loss: {eval_loss:.4f}, Perplexity: {perplexity:.2f}")
             self.save_checkpoint(epoch, avg_train_loss)
             self.log_metrics(epoch, avg_train_loss, eval_loss, perplexity)
             self.scheduler.step()
@@ -270,7 +248,7 @@ def get_config(preset="base"):
         "log_dir": "logs",
         "ckpt_dir": "checkpoints",
         "dataset_path": "data/train.txt",
-        "dataset_name": "wikipedia",
+        "dataset_name": "webcrawl",
         "dataset_config": "20220301.en",
         "split": "train",
         "use_streaming": True,
