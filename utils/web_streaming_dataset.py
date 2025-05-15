@@ -30,6 +30,8 @@ class WebCrawlStreamDataset(IterableDataset):
         self.failed_urls = set()
 
     def __iter__(self):
+        print("[DEBUG] __iter__ triggered with URL list size:", len(self.urls))
+
         successful = 0
 
         for url in self.urls:
@@ -67,6 +69,8 @@ class WebCrawlStreamDataset(IterableDataset):
             for i in range(0, total_len - self.max_length + 1, self.max_length):
                 chunk_ids = input_ids[i:i + self.max_length]
                 chunk_mask = attention_mask[i:i + self.max_length]
+
+                print(f"[YIELD] Chunk from {url}: token_ids = {chunk_ids.tolist()[:5]}")
 
                 yield {
                     "input_ids": chunk_ids,
