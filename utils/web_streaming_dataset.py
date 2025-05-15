@@ -43,27 +43,42 @@ class WebCrawlStreamDataset(IterableDataset):
                 self.failed_urls.add(url)
                 continue
 
+            print(f"[DEBUG] Text length for {url}: {len(text)}")
+
+            # Tokenize full text (no truncation)
             encoding = self.tokenizer(
                 text,
                 return_tensors="pt",
-                padding="max_length",
-                truncation=True,
-                max_length=self.max_length
+                padding=False,
+                truncation=False
             )
 
-            if encoding["input_ids"].nelement() == 0:
-                print(f"[!] Skipping empty encoding for: {url}")
+            input_ids = encoding["input_ids"].squeeze(0)
+            attention_mask = encoding["attention_mask"].squeeze(0)
+            total_len = input_ids.size(0)
+
+            if total_len < self.max_length:
+                print(f"[!] Skipping short content from: {url}")
                 self.failed_urls.add(url)
                 continue
 
+            # Yield chunks of max_length tokens
+            num_chunks = 0
+            for i in range(0, total_len - self.max_length + 1, self.max_length):
+                chunk_ids = input_ids[i:i + self.max_length]
+                chunk_mask = attention_mask[i:i + self.max_length]
+
+                yield {
+                    "input_ids": chunk_ids,
+                    "attention_mask": chunk_mask
+                }
+                num_chunks += 1
+
+            print(f"[✓] Yielded {num_chunks} samples from: {url}")
             time.sleep(self.delay)
             successful += 1
 
-            yield {
-                "input_ids": encoding["input_ids"].squeeze(0),
-                "attention_mask": encoding["attention_mask"].squeeze(0)
-            }
-
         if successful == 0:
             print("[!] WARNING: No successful crawls this epoch.")
+
 
