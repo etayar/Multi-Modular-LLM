@@ -33,18 +33,10 @@ class TransformerTrainer:
         self.config["vocab_size"] = true_vocab_size
 
         self.model = self._build_model()
+        if self.tokenizer.pad_token_id is None:
+            raise ValueError("Tokenizer has no pad_token_id set, which is required for ignore_index.")
         self.criterion = nn.CrossEntropyLoss(ignore_index=self.tokenizer.pad_token_id)
         self.optimizer = optim.AdamW(self.model.parameters(), lr=config["lr"])
-
-        # Calculate total steps (roughly)
-        total_steps = self.config["epochs"] * len(self.dataloader)
-        warmup_steps = int(0.1 * total_steps)  # e.g. 10% warmup
-
-        self.scheduler = get_cosine_schedule_with_warmup(
-            self.optimizer,
-            num_warmup_steps=warmup_steps,
-            num_training_steps=total_steps
-        )
 
         self.project_root = Path(__file__).resolve().parents[1]
         self.ckpt_dir = self.project_root / config["ckpt_dir"]
@@ -116,6 +108,16 @@ class TransformerTrainer:
             batch_size=self.config["batch_size"],
             shuffle=not config.get("use_streaming", False),
             num_workers=0  # Explicitly set to avoid multiprocessing issues with web crawling
+        )
+
+        # Calculate total steps (roughly)
+        total_steps = self.config["epochs"] * len(self.dataloader)
+        warmup_steps = int(0.1 * total_steps)  # e.g. 10% warmup
+
+        self.scheduler = get_cosine_schedule_with_warmup(
+            self.optimizer,
+            num_warmup_steps=warmup_steps,
+            num_training_steps=total_steps
         )
 
         self.tb_writer = SummaryWriter(log_dir=str(self.log_dir / "tensorboard"))
