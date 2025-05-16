@@ -234,7 +234,7 @@ def get_config(preset="base"):
     return {
         "vocab_size": 5e4,
         "max_len": 256,
-        "batch_size": 64,
+        "batch_size": 32,
         "dropout": 0.2,
         "lr": 1e-4,
         "max_articles": 1e5,
