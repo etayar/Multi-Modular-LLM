@@ -24,8 +24,8 @@ class TransformerTrainer:
             commit_hash = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode().strip()
         except Exception:
             commit_hash = "N/A"
-        self.config["__git_commit"] = commit_hash
-        self.config["__run_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.config["__git_commit__"] = commit_hash
+        self.config["__run_time__"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.device = config["device"]
         self.tokenizer = load_tokenizer()
         true_vocab_size = self.tokenizer.vocab_size
@@ -51,6 +51,7 @@ class TransformerTrainer:
 
         self.start_epoch = 1
         self.best_eval_loss = float("inf")
+        self.lr_history = []
 
         resume_path = config.get("resume_from")
         if resume_path:
@@ -165,6 +166,7 @@ class TransformerTrainer:
 
         return loss.item()
 
+    @torch.no_grad()
     def evaluate(self, num_batches=None):
         self.model.eval()
         total_loss = 0
@@ -177,11 +179,10 @@ class TransformerTrainer:
             try:
                 input_ids = batch["input_ids"].to(self.device)
                 attention_mask = batch["attention_mask"].to(self.device)
-                with torch.no_grad():
-                    logits = self.model(input_ids, attention_mask=attention_mask)
-                    loss = self.criterion(logits.view(-1, logits.size(-1)), input_ids.view(-1))
-                    total_loss += loss.item()
-                    progress_bar.set_postfix(loss=f"{(total_loss / (i + 1)):.4f}")
+                logits = self.model(input_ids, attention_mask=attention_mask)
+                loss = self.criterion(logits.view(-1, logits.size(-1)), input_ids.view(-1))
+                total_loss += loss.item()
+                progress_bar.set_postfix(loss=f"{(total_loss / (i + 1)):.4f}")
             except Exception as e:
                 print(f"[WARN] Skipping eval batch {i} due to error: {e}")
 
@@ -215,6 +216,7 @@ class TransformerTrainer:
 
             train_loss_history.append(avg_train_loss)
             eval_loss_history.append(eval_loss)
+            self.lr_history.append(self.scheduler.get_last_lr()[0])
 
             print(f"Epoch {epoch} Complete — Train Loss: {avg_train_loss:.4f}, Eval Loss: {eval_loss:.4f}, Perplexity: {perplexity:.2f}")
 
@@ -223,7 +225,6 @@ class TransformerTrainer:
             self.tb_writer.add_scalar("Perplexity/epoch_eval", perplexity, epoch)
             self.tb_writer.add_scalar("LR", self.scheduler.get_last_lr()[0], epoch)
 
-            # Save best model checkpoint
             if eval_loss < self.best_eval_loss:
                 self.best_eval_loss = eval_loss
                 ckpt_path = self.ckpt_dir / f"{self.config['__model_name__']}_best.pt"
@@ -235,6 +236,7 @@ class TransformerTrainer:
                     "config": self.config
                 }, ckpt_path)
                 print(f"[INFO] Best model saved to {ckpt_path}")
+
                 metadata_path = self.ckpt_dir / f"{self.config['__model_name__']}_best_meta.json"
                 with open(metadata_path, "w") as f:
                     json.dump({
@@ -243,7 +245,7 @@ class TransformerTrainer:
                         "eval_loss": eval_loss,
                         "perplexity": perplexity,
                         "timestamp": datetime.now().isoformat()
-                    }, f)
+                    }, f, indent=2)
 
             self.scheduler.step()
 
@@ -251,9 +253,17 @@ class TransformerTrainer:
         with open(history_path, "w") as f:
             json.dump({
                 "train_loss": train_loss_history,
-                "eval_loss": eval_loss_history
+                "eval_loss": eval_loss_history,
+                "lr": self.lr_history
             }, f)
         print(f"[INFO] Saved loss history to: {history_path}")
+
+        csv_path = self.log_dir / "loss_history.csv"
+        with open(csv_path, "w") as f:
+            f.write("epoch,train_loss,eval_loss,lr\n")
+            for i in range(len(train_loss_history)):
+                f.write(f"{i + self.start_epoch},{train_loss_history[i]},{eval_loss_history[i]},{self.lr_history[i]}\n")
+        print(f"[INFO] Saved loss history CSV to: {csv_path}")
 
 
 def get_config(preset="base"):
