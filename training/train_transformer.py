@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -12,10 +13,11 @@ from datetime import datetime
 from tqdm import tqdm
 from torch.optim.lr_scheduler import ExponentialLR
 from torch.utils.tensorboard import SummaryWriter
-
+from torch.cuda.amp import autocast, GradScaler
 
 class TransformerTrainer:
     def __init__(self, config):
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
         self.config = config
         self.config["__data_mode__"] = "streaming" if config.get("use_streaming", False) else "local"
         try:
@@ -36,6 +38,7 @@ class TransformerTrainer:
             raise ValueError("Tokenizer has no pad_token_id set, which is required for ignore_index.")
         self.criterion = nn.CrossEntropyLoss(ignore_index=self.tokenizer.pad_token_id)
         self.optimizer = optim.AdamW(self.model.parameters(), lr=config["lr"])
+        self.scaler = GradScaler()
 
         self.project_root = Path(__file__).resolve().parents[1]
         self.ckpt_dir = self.project_root / config["ckpt_dir"]
@@ -89,7 +92,7 @@ class TransformerTrainer:
                     for example in self.dataset:
                         if self.max_articles is not None and count >= self.max_articles:
                             break
-                        tokens = self.tokenizer(example["text"], return_attention_mask=True, truncation=False)["input_ids"]
+                        tokens = self.tokenizer(example["text"], return_attention_mask=False, truncation=True, max_length=self.max_length * 10)["input_ids"]
                         for i in range(0, len(tokens) - self.max_length + 1, self.max_length):
                             chunk = tokens[i:i + self.max_length]
                             yield {
@@ -146,99 +149,20 @@ class TransformerTrainer:
         self.model.train()
         input_ids = batch["input_ids"].to(self.device)
         attention_mask = batch["attention_mask"].to(self.device)
-        logits = self.model(input_ids, attention_mask=attention_mask)
-        loss = self.criterion(logits.view(-1, logits.size(-1)), input_ids.view(-1))
+
+        with autocast():
+            logits = self.model(input_ids, attention_mask=attention_mask)
+            loss = self.criterion(logits.view(-1, logits.size(-1)), input_ids.view(-1))
+
         self.optimizer.zero_grad()
-        loss.backward()
+        self.scaler.scale(loss).backward()
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-        self.optimizer.step()
+        self.scaler.step(self.optimizer)
+        self.scaler.update()
+
         return loss.item()
 
-    def save_checkpoint(self, epoch, loss):
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        model_name = self.config.get("__model_name__", "model")
-        dataset_name = self.config.get("dataset_name", "dataset")
-        ckpt_path = self.ckpt_dir / f"{model_name}_{dataset_name}_epoch_{epoch:03d}_{timestamp}.pt"
-        torch.save({
-            "epoch": epoch,
-            "model_state_dict": self.model.state_dict(),
-            "optimizer_state_dict": self.optimizer.state_dict(),
-            "loss": loss,
-            "config": self.config
-        }, ckpt_path)
-        print(f"Checkpoint saved: {ckpt_path}")
-
-    def log_metrics(self, epoch, train_loss, eval_loss, perplexity):
-        self.config["__data_mode__"] = "streaming" if self.config.get("use_streaming", False) else "local"
-        write_header = not self.log_path.exists()
-        with self.log_path.open(mode="a", newline="") as f:
-            writer = csv.writer(f)
-            if write_header:
-                writer.writerow(["timestamp", "epoch", "train_loss", "eval_loss", "perplexity", "__data_mode__", "__git_commit__", "__run_time__", "__model_name__"] + list(self.config.keys()))
-            writer.writerow([datetime.now().isoformat(), epoch, train_loss, eval_loss, perplexity, self.config["__data_mode__"], self.config["__git_commit__"], self.config["__run_time__"], self.config["__model_name__"]] + list(self.config.values()))
-
-    @torch.no_grad()
-    def evaluate(self, num_batches=None):
-        self.model.eval()
-        total_loss = 0
-        num_batches = num_batches or self.config.get("max_eval_batches") or 5
-        progress_bar = tqdm(enumerate(self.dataloader), total=num_batches, desc="Evaluating", leave=False)
-
-        for i, batch in progress_bar:
-            if i >= num_batches:
-                break
-            try:
-                input_ids = batch["input_ids"].to(self.device)
-                attention_mask = batch["attention_mask"].to(self.device)
-                logits = self.model(input_ids, attention_mask=attention_mask)
-                loss = self.criterion(logits.view(-1, logits.size(-1)), input_ids.view(-1))
-                total_loss += loss.item()
-                avg_loss_so_far = total_loss / (i + 1)
-                progress_bar.set_postfix(loss=f"{avg_loss_so_far:.4f}")
-            except Exception as e:
-                print(f"[WARN] Skipping eval batch {i} due to error: {e}")
-                continue
-
-        avg_loss = total_loss / num_batches
-        perplexity = torch.exp(torch.tensor(avg_loss)).item()
-        print(f"Validation — Avg Loss: {avg_loss:.4f} | Perplexity: {perplexity:.2f}")
-        return avg_loss, perplexity
-
-    def train(self):
-        for epoch in range(self.start_epoch, self.config["epochs"] + 1):
-            train_losses = []
-            print(f"\nEpoch {epoch}/{self.config['epochs']}")
-            max_batches = self.config.get("max_train_batches")
-            total_batches = max_batches if max_batches is not None else None
-            progress_bar = tqdm(enumerate(self.dataloader), total=total_batches, desc="Training", leave=False)
-            print("[DEBUG] Starting training loop, waiting for first batch...")
-
-            for i, batch in progress_bar:
-                if max_batches is not None and i >= max_batches:
-                    break
-                try:
-                    train_loss = self.train_step(batch)
-                    train_losses.append(train_loss)
-                    avg_train_loss = sum(train_losses) / len(train_losses)
-                    progress_bar.set_postfix(loss=f"{avg_train_loss:.4f}")
-                except Exception as e:
-                    print(f"[WARN] Skipping batch {i} due to error: {e}")
-                    continue
-
-            avg_train_loss = sum(train_losses) / len(train_losses)
-            eval_loss, perplexity = self.evaluate()
-            print(f"Epoch {epoch} Complete — Train Loss: {avg_train_loss:.4f}, Eval Loss: {eval_loss:.4f}, Perplexity: {perplexity:.2f}")
-            self.save_checkpoint(epoch, avg_train_loss)
-            self.log_metrics(epoch, avg_train_loss, eval_loss, perplexity)
-            self.scheduler.step()
-            print(f"[DEBUG] LR after epoch {epoch}: {self.scheduler.get_last_lr()[0]:.6f}")
-
-            self.tb_writer.add_scalar("Loss/train", avg_train_loss, epoch)
-            self.tb_writer.add_scalar("Loss/eval", eval_loss, epoch)
-            self.tb_writer.add_scalar("Perplexity/eval", perplexity, epoch)
-
-        self.tb_writer.close()
-
+# (get_config and __main__ stay the same)
 
 def get_config(preset="base"):
     presets = {
@@ -255,11 +179,11 @@ def get_config(preset="base"):
 
     return {
         "vocab_size": 1000,
-        "max_len": 256,
+        "max_len": 64,
         "batch_size": 64,
         "dropout": 0.2,
         "lr": 1e-4,
-        "max_articles": 1e5,
+        "max_articles": 100,
         "epochs": 10,
         "log_dir": "logs",
         "ckpt_dir": "checkpoints",
