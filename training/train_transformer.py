@@ -260,7 +260,7 @@ def get_config(preset="base"):
         "batch_size": 64,
         "dropout": 0.2,
         "lr": 1e-4,
-        "max_articles": 100,
+        "max_articles": 20000,
         "epochs": 10,
         "log_dir": "logs",
         "ckpt_dir": "checkpoints",
