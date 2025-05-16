@@ -7,7 +7,7 @@ from model.utils import count_parameters
 from utils.tokenizer import load_tokenizer
 from torch.utils.data import DataLoader, IterableDataset
 from pathlib import Path
-import csv
+import json
 import subprocess
 from datetime import datetime
 from tqdm import tqdm
@@ -24,14 +24,13 @@ class TransformerTrainer:
             commit_hash = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode().strip()
         except Exception:
             commit_hash = "N/A"
-        self.config["__git_commit__"] = commit_hash
-        self.config["__run_time__"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.config["__git_commit"] = commit_hash
+        self.config["__run_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.device = config["device"]
         self.tokenizer = load_tokenizer()
         true_vocab_size = self.tokenizer.vocab_size
         if self.config.get("vocab_size") is None or self.config["vocab_size"] < true_vocab_size:
-            print(
-                f"[WARN] vocab_size was {self.config.get('vocab_size')}, updating to match tokenizer ({true_vocab_size})")
+            print(f"[WARN] vocab_size was {self.config.get('vocab_size')}, updating to match tokenizer ({true_vocab_size})")
             self.config["vocab_size"] = true_vocab_size
 
         self.model = self._build_model()
@@ -51,6 +50,7 @@ class TransformerTrainer:
         self.log_path = self.log_dir / "train_log.csv"
 
         self.start_epoch = 1
+        self.best_eval_loss = float("inf")
 
         resume_path = config.get("resume_from")
         if resume_path:
@@ -191,6 +191,8 @@ class TransformerTrainer:
         return avg_loss, perplexity
 
     def train(self):
+        train_loss_history = []
+        eval_loss_history = []
         for epoch in range(self.start_epoch, self.config["epochs"] + 1):
             train_losses = []
             print(f"\nEpoch {epoch}/{self.config['epochs']}")
@@ -210,6 +212,10 @@ class TransformerTrainer:
 
             avg_train_loss = sum(train_losses) / len(train_losses)
             eval_loss, perplexity = self.evaluate()
+
+            train_loss_history.append(avg_train_loss)
+            eval_loss_history.append(eval_loss)
+
             print(f"Epoch {epoch} Complete — Train Loss: {avg_train_loss:.4f}, Eval Loss: {eval_loss:.4f}, Perplexity: {perplexity:.2f}")
 
             self.tb_writer.add_scalar("Loss/epoch_train", avg_train_loss, epoch)
@@ -217,7 +223,38 @@ class TransformerTrainer:
             self.tb_writer.add_scalar("Perplexity/epoch_eval", perplexity, epoch)
             self.tb_writer.add_scalar("LR", self.scheduler.get_last_lr()[0], epoch)
 
+            # Save best model checkpoint
+            if eval_loss < self.best_eval_loss:
+                self.best_eval_loss = eval_loss
+                ckpt_path = self.ckpt_dir / f"{self.config['__model_name__']}_best.pt"
+                torch.save({
+                    "epoch": epoch,
+                    "model_state_dict": self.model.state_dict(),
+                    "optimizer_state_dict": self.optimizer.state_dict(),
+                    "loss": avg_train_loss,
+                    "config": self.config
+                }, ckpt_path)
+                print(f"[INFO] Best model saved to {ckpt_path}")
+                metadata_path = self.ckpt_dir / f"{self.config['__model_name__']}_best_meta.json"
+                with open(metadata_path, "w") as f:
+                    json.dump({
+                        "epoch": epoch,
+                        "train_loss": avg_train_loss,
+                        "eval_loss": eval_loss,
+                        "perplexity": perplexity,
+                        "timestamp": datetime.now().isoformat()
+                    }, f)
+
             self.scheduler.step()
+
+        history_path = self.log_dir / "loss_history.json"
+        with open(history_path, "w") as f:
+            json.dump({
+                "train_loss": train_loss_history,
+                "eval_loss": eval_loss_history
+            }, f)
+        print(f"[INFO] Saved loss history to: {history_path}")
+
 
 def get_config(preset="base"):
     presets = {
@@ -252,7 +289,7 @@ def get_config(preset="base"):
         "max_train_batches": None,
         "max_eval_batches": None,
         "lr_step_size": 2,
-        "lr_gamma": 0.5,
+        "lr_gamma": 0.5,  # lr_step_size: 2 and lr_gamma: 0.5 means every 2 epochs the LR drops by half
         "load_last_cp": False,
         "resume_from": None,
         "__model_name__": "GPTBackbone",
