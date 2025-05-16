@@ -214,7 +214,6 @@ class TransformerTrainer:
             print("[DEBUG] Starting training loop, waiting for first batch...")
 
             for i, batch in progress_bar:
-                print(f"[DEBUG] Got batch {i} with shape: input_ids={batch['input_ids'].shape}, attention_mask={batch['attention_mask'].shape}")
                 if max_batches is not None and i >= max_batches:
                     break
                 try:
