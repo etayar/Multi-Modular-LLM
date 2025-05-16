@@ -29,9 +29,10 @@ class TransformerTrainer:
         self.device = config["device"]
         self.tokenizer = load_tokenizer()
         true_vocab_size = self.tokenizer.vocab_size
-        if "vocab_size" in self.config and self.config["vocab_size"] < true_vocab_size:
-            print(f"[WARN] Config vocab_size ({self.config['vocab_size']}) is smaller than tokenizer vocab size ({true_vocab_size}). Updating.")
-        self.config["vocab_size"] = true_vocab_size
+        if self.config.get("vocab_size") is None or self.config["vocab_size"] < true_vocab_size:
+            print(
+                f"[WARN] vocab_size was {self.config.get('vocab_size')}, updating to match tokenizer ({true_vocab_size})")
+            self.config["vocab_size"] = true_vocab_size
 
         self.model = self._build_model()
         if self.tokenizer.pad_token_id is None:
