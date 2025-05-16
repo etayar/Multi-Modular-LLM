@@ -160,9 +160,63 @@ class TransformerTrainer:
         self.scaler.step(self.optimizer)
         self.scaler.update()
 
+        self.tb_writer.add_scalar("Loss/batch_train", loss.item())
+
         return loss.item()
 
-# (get_config and __main__ stay the same)
+    def evaluate(self, num_batches=None):
+        self.model.eval()
+        total_loss = 0
+        num_batches = num_batches or self.config.get("max_eval_batches") or 5
+        progress_bar = tqdm(enumerate(self.dataloader), total=num_batches, desc="Evaluating", leave=False)
+
+        for i, batch in progress_bar:
+            if i >= num_batches:
+                break
+            try:
+                input_ids = batch["input_ids"].to(self.device)
+                attention_mask = batch["attention_mask"].to(self.device)
+                with torch.no_grad():
+                    logits = self.model(input_ids, attention_mask=attention_mask)
+                    loss = self.criterion(logits.view(-1, logits.size(-1)), input_ids.view(-1))
+                    total_loss += loss.item()
+                    progress_bar.set_postfix(loss=f"{(total_loss / (i + 1)):.4f}")
+            except Exception as e:
+                print(f"[WARN] Skipping eval batch {i} due to error: {e}")
+
+        avg_loss = total_loss / num_batches
+        perplexity = torch.exp(torch.tensor(avg_loss)).item()
+        print(f"Validation — Avg Loss: {avg_loss:.4f} | Perplexity: {perplexity:.2f}")
+        return avg_loss, perplexity
+
+    def train(self):
+        for epoch in range(self.start_epoch, self.config["epochs"] + 1):
+            train_losses = []
+            print(f"\nEpoch {epoch}/{self.config['epochs']}")
+            max_batches = self.config.get("max_train_batches")
+            total_batches = max_batches if max_batches is not None else None
+            progress_bar = tqdm(enumerate(self.dataloader), total=total_batches, desc="Training", leave=False)
+
+            for i, batch in progress_bar:
+                if max_batches is not None and i >= max_batches:
+                    break
+                try:
+                    loss = self.train_step(batch)
+                    train_losses.append(loss)
+                    progress_bar.set_postfix(loss=f"{(sum(train_losses) / len(train_losses)):.4f}")
+                except Exception as e:
+                    print(f"[WARN] Skipping batch {i} due to error: {e}")
+
+            avg_train_loss = sum(train_losses) / len(train_losses)
+            eval_loss, perplexity = self.evaluate()
+            print(f"Epoch {epoch} Complete — Train Loss: {avg_train_loss:.4f}, Eval Loss: {eval_loss:.4f}, Perplexity: {perplexity:.2f}")
+
+            self.tb_writer.add_scalar("Loss/epoch_train", avg_train_loss, epoch)
+            self.tb_writer.add_scalar("Loss/epoch_eval", eval_loss, epoch)
+            self.tb_writer.add_scalar("Perplexity/epoch_eval", perplexity, epoch)
+            self.tb_writer.add_scalar("LR", self.scheduler.get_last_lr()[0], epoch)
+
+            self.scheduler.step()
 
 def get_config(preset="base"):
     presets = {
@@ -179,16 +233,16 @@ def get_config(preset="base"):
 
     return {
         "vocab_size": 1000,
-        "max_len": 64,
+        "max_len": 256,
         "batch_size": 64,
         "dropout": 0.2,
         "lr": 1e-4,
-        "max_articles": 100,
+        "max_articles": 1e5,
         "epochs": 10,
         "log_dir": "logs",
         "ckpt_dir": "checkpoints",
         "dataset_path": "data/train.txt",
-        "dataset_name": "webcrawl",
+        "dataset_name": "wikipedia",
         "use_wikipedia": True,
         "dataset_config": "20220301.en",
         "split": "train",
@@ -213,7 +267,6 @@ def get_config(preset="base"):
             "https://www.gutenberg.org/files/98/98-h/98-h.htm"
         ]
     }
-
 
 if __name__ == "__main__":
     print("[WARN] Do not run this as a script directly. Use from Colab or external launcher.")
