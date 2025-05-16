@@ -255,11 +255,11 @@ def get_config(preset="base"):
 
     return {
         "vocab_size": 1000,
-        "max_len": 64,
+        "max_len": 256,
         "batch_size": 64,
         "dropout": 0.2,
         "lr": 1e-4,
-        "max_articles": 20000,
+        "max_articles": 1e5,
         "epochs": 10,
         "log_dir": "logs",
         "ckpt_dir": "checkpoints",
