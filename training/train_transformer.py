@@ -232,7 +232,7 @@ def get_config(preset="base"):
     assert preset in presets, f"Invalid preset '{preset}'. Choose from: {list(presets.keys())}"
 
     return {
-        "vocab_size": 1000,
+        "vocab_size": 5e4,
         "max_len": 256,
         "batch_size": 64,
         "dropout": 0.2,
