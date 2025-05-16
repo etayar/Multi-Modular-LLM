@@ -15,6 +15,37 @@ from torch.optim.lr_scheduler import ExponentialLR
 from torch.utils.tensorboard import SummaryWriter
 from torch.cuda.amp import autocast, GradScaler
 
+
+class EarlyStopping:
+    def __init__(self, patience=5, es_threshold=1e-3):
+        """
+        Early stops training if validation loss doesn't improve after a given patience.
+        Args:
+            patience (int): How many epochs to wait before stopping if no improvement.
+            es_threshold (float): Minimum change in validation loss to qualify as an improvement.
+        """
+        self.patience = patience
+        self.es_threshold = es_threshold
+        self.best_loss = float("inf")
+        self.counter = 0
+
+    def step(self, val_loss):
+        """
+        Call this function after each epoch to check if training should stop.
+        Returns True if training should stop, False otherwise.
+        """
+
+        if val_loss < self.best_loss - self.es_threshold:
+            self.best_loss = val_loss
+            self.counter = 0  # Reset counter if loss improves
+        elif val_loss < self.best_loss:
+            self.best_loss = val_loss  # Update best loss but don't reset patience if improvement is small
+        else:
+            self.counter += 1  # Increase counter if no improvement
+
+        return self.counter >= self.patience  # Stop if patience threshold is reached
+
+
 class TransformerTrainer:
     def __init__(self, config):
         os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
@@ -52,6 +83,7 @@ class TransformerTrainer:
         self.start_epoch = 1
         self.best_eval_loss = float("inf")
         self.lr_history = []
+        self.early_stop_patience = config.get("early_stop_patience", 3)  # Configure it in get_config()
 
         resume_path = config.get("resume_from")
         if resume_path:
@@ -192,6 +224,7 @@ class TransformerTrainer:
         return avg_loss, perplexity
 
     def train(self):
+        early_stopping = EarlyStopping(patience=self.early_stop_patience)
         train_loss_history = []
         eval_loss_history = []
         for epoch in range(self.start_epoch, self.config["epochs"] + 1):
@@ -258,6 +291,12 @@ class TransformerTrainer:
                     }, f, indent=2)
 
             self.scheduler.step()
+
+            # **Check for Early Stopping**
+            if early_stopping.step(eval_loss):
+                print(f"Early stopping triggered at epoch {epoch + 1}.")
+                # Should i save here the model again?
+                break  # STOP TRAINING
 
         history_path = self.log_dir / "loss_history.json"
         with open(history_path, "w") as f:
