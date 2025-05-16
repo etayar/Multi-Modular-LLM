@@ -232,12 +232,12 @@ def get_config(preset="base"):
     assert preset in presets, f"Invalid preset '{preset}'. Choose from: {list(presets.keys())}"
 
     return {
-        "vocab_size": 5e4,
+        "vocab_size": None,  # Let the model set this dynamically from the tokenizer
         "max_len": 256,
         "batch_size": 32,
         "dropout": 0.2,
         "lr": 1e-4,
-        "max_articles": 1e5,
+        "max_articles": 5e4,  # Max number of Wikipedia articles to stream during training (via Hugging Face Datasets)
         "epochs": 10,
         "log_dir": "logs",
         "ckpt_dir": "checkpoints",
