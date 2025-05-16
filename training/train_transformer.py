@@ -87,7 +87,7 @@ class TransformerTrainer:
                     self.tokenizer = tokenizer
                     self.max_length = max_length
                     self.max_articles = max_articles
-                    self.dataset = load_dataset("wikipedia", "20220301.en", split="train", streaming=True)
+                    self.dataset = load_dataset("wikipedia", config.get("dataset_config", "20220301.en"), split="train", streaming=True)
 
                 def __iter__(self):
                     count = 0
@@ -227,6 +227,7 @@ class TransformerTrainer:
 
             if eval_loss < self.best_eval_loss:
                 self.best_eval_loss = eval_loss
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 ckpt_path = self.ckpt_dir / f"{self.config['__model_name__']}_best.pt"
                 torch.save({
                     "epoch": epoch,
@@ -237,6 +238,15 @@ class TransformerTrainer:
                 }, ckpt_path)
                 print(f"[INFO] Best model saved to {ckpt_path}")
 
+                versioned_ckpt_path = self.ckpt_dir / f"{self.config['__model_name__']}_best_{timestamp}.pt"
+                torch.save({
+                    "epoch": epoch,
+                    "model_state_dict": self.model.state_dict(),
+                    "optimizer_state_dict": self.optimizer.state_dict(),
+                    "loss": avg_train_loss,
+                    "config": self.config
+                }, versioned_ckpt_path)
+
                 metadata_path = self.ckpt_dir / f"{self.config['__model_name__']}_best_meta.json"
                 with open(metadata_path, "w") as f:
                     json.dump({
@@ -244,7 +254,7 @@ class TransformerTrainer:
                         "train_loss": avg_train_loss,
                         "eval_loss": eval_loss,
                         "perplexity": perplexity,
-                        "timestamp": datetime.now().isoformat()
+                        "timestamp": timestamp
                     }, f, indent=2)
 
             self.scheduler.step()
