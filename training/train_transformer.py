@@ -71,13 +71,18 @@ class TransformerTrainer:
         self.optimizer = optim.AdamW(self.model.parameters(), lr=config["lr"])
         self.scaler = GradScaler()
 
-        self.project_root = Path(__file__).resolve().parents[1]
+        try:
+            self.project_root = Path(__file__).resolve().parents[1]
+        except NameError:
+            self.project_root = Path.cwd()
+
         self.ckpt_dir = self.project_root / config["ckpt_dir"]
         self.log_dir = self.project_root / config["log_dir"]
         self.data_path = self.project_root / config["dataset_path"]
 
         self.ckpt_dir.mkdir(parents=True, exist_ok=True)
         self.log_dir.mkdir(parents=True, exist_ok=True)
+        print(f"[DEBUG] Saving logs to: {self.log_dir}")
         self.log_path = self.log_dir / "train_log.csv"
 
         self.start_epoch = 1
