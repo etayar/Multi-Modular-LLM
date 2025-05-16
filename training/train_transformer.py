@@ -4,7 +4,7 @@ import torch.optim as optim
 from model import GPTBackbone
 from model.utils import count_parameters
 from utils.tokenizer import load_tokenizer
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, IterableDataset
 from pathlib import Path
 import csv
 import subprocess
@@ -62,7 +62,6 @@ class TransformerTrainer:
                 print(f"[INFO] Resuming from epoch {self.start_epoch}")
             else:
                 print(f"[WARN] Specified checkpoint not found: {ckpt_path}")
-
         elif config.get("load_last_cp", False):
             ckpts = list(self.ckpt_dir.glob("*.pt"))
             if ckpts:
@@ -74,19 +73,48 @@ class TransformerTrainer:
                 self.start_epoch = checkpoint["epoch"] + 1
                 print(f"[INFO] Resuming from epoch {self.start_epoch}")
 
-        if config.get("use_streaming", False):
-            from utils.web_streaming_dataset import WebCrawlStreamDataset
-            print(f"[INFO] Using WebCrawlStreamDataset (live crawling)")
-            self.dataset = WebCrawlStreamDataset(
-                urls=config["webcrawl_urls"],
-                tokenizer=self.tokenizer,
-                max_length=config["max_len"],
-                delay=config.get("crawl_delay", 1.0)
+        if config.get("use_wikipedia", False):
+            from datasets import load_dataset
+            print(f"[INFO] Using Hugging Face Wikipedia stream dataset")
+
+            class WikipediaStreamDataset(IterableDataset):
+                def __init__(self, tokenizer, max_length, max_articles=None):
+                    self.tokenizer = tokenizer
+                    self.max_length = max_length
+                    self.max_articles = max_articles
+                    self.dataset = load_dataset("wikipedia", "20220301.en", split="train", streaming=True)
+
+                def __iter__(self):
+                    count = 0
+                    for example in self.dataset:
+                        if self.max_articles is not None and count >= self.max_articles:
+                            break
+                        tokens = self.tokenizer(example["text"], return_attention_mask=True, truncation=False)["input_ids"]
+                        for i in range(0, len(tokens) - self.max_length + 1, self.max_length):
+                            chunk = tokens[i:i + self.max_length]
+                            yield {
+                                "input_ids": torch.tensor(chunk),
+                                "attention_mask": torch.ones(len(chunk), dtype=torch.long)
+                            }
+                        count += 1
+
+            self.dataset = WikipediaStreamDataset(
+                self.tokenizer, config["max_len"], config.get("max_articles")
             )
         else:
-            from utils.dataset import TextDataset
-            print(f"[INFO] Using local text dataset from: {self.data_path}")
-            self.dataset = TextDataset(str(self.data_path), self.tokenizer, max_length=config["max_len"])
+            if config.get("use_streaming", False):
+                from utils.web_streaming_dataset import WebCrawlStreamDataset
+                print(f"[INFO] Using WebCrawlStreamDataset (live crawling)")
+                self.dataset = WebCrawlStreamDataset(
+                    urls=config["webcrawl_urls"],
+                    tokenizer=self.tokenizer,
+                    max_length=config["max_len"],
+                    delay=config.get("crawl_delay", 1.0)
+                )
+            else:
+                from utils.dataset import TextDataset
+                print(f"[INFO] Using local text dataset from: {self.data_path}")
+                self.dataset = TextDataset(str(self.data_path), self.tokenizer, max_length=config["max_len"])
 
         self.dataloader = DataLoader(
             self.dataset,
@@ -106,13 +134,12 @@ class TransformerTrainer:
             embed_dim=self.config["embed_dim"],
             num_heads=self.config["num_heads"],
             num_layers=self.config["num_layers"],
-            dropout= dropout if dropout else 0.15
+            dropout=dropout if dropout else 0.15
         )
         print(f"Model initialized with {count_parameters(model):,} parameters.")
         return model.to(self.device)
 
     def train_step(self, batch):
-
         if "input_ids" not in batch or "attention_mask" not in batch:
             raise ValueError("Missing input_ids or attention_mask in batch")
 
@@ -187,10 +214,7 @@ class TransformerTrainer:
             print("[DEBUG] Starting training loop, waiting for first batch...")
 
             for i, batch in progress_bar:
-                print(
-                    f"[DEBUG] Got batch {i} with shape: input_ids={batch['input_ids'].shape}, attention_mask={batch['attention_mask'].shape}"
-                )
-
+                print(f"[DEBUG] Got batch {i} with shape: input_ids={batch['input_ids'].shape}, attention_mask={batch['attention_mask'].shape}")
                 if max_batches is not None and i >= max_batches:
                     break
                 try:
@@ -236,11 +260,13 @@ def get_config(preset="base"):
         "batch_size": 64,
         "dropout": 0.2,
         "lr": 1e-4,
-        "epochs": 5,
+        "max_articles": 100,
+        "epochs": 10,
         "log_dir": "logs",
         "ckpt_dir": "checkpoints",
         "dataset_path": "data/train.txt",
         "dataset_name": "webcrawl",
+        "use_wikipedia": True,
         "dataset_config": "20220301.en",
         "split": "train",
         "use_streaming": True,
@@ -249,7 +275,7 @@ def get_config(preset="base"):
         "max_eval_batches": None,
         "lr_step_size": 2,
         "lr_gamma": 0.5,
-        "load_last_cp": True,
+        "load_last_cp": False,
         "resume_from": None,
         "__model_name__": "GPTBackbone",
         "crawl_delay": 1.0,
@@ -260,13 +286,13 @@ def get_config(preset="base"):
             "https://www.aljazeera.com/news/2024/5/14/gaza-ceasefire-latest",
             "https://arxiv.org/abs/2405.01700",
             "https://arxiv.org/abs/2405.00566",
-            "https://www.gutenberg.org/files/11/11-h/11-h.htm",  # Alice in Wonderland
-            "https://www.gutenberg.org/files/98/98-h/98-h.htm"    # A Tale of Two Cities
+            "https://www.gutenberg.org/files/11/11-h/11-h.htm",
+            "https://www.gutenberg.org/files/98/98-h/98-h.htm"
         ]
     }
 
 
 if __name__ == "__main__":
-    import sys
     print("[WARN] Do not run this as a script directly. Use from Colab or external launcher.")
+    import sys
     sys.exit(1)
