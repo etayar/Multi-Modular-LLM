@@ -1,29 +1,23 @@
-from typing import List
 from pathlib import Path
+import re
+from typing import List
 
-def list_all_checkpoints(ckpt_dir: str) -> List[Path]:
+def list_training_run_dates() -> List[str]:
     """
-    Return all .pt checkpoint files sorted by modification time.
-    Works in any environment (Colab, local, server).
+    Lists only the subdirectory names in 'training_runs/' that match the date format YYYY-MM-DD_HH-MM-SS.
     """
-    try:
-        base_dir = Path(__file__).resolve().parent.parent
-    except NameError:
-        base_dir = Path.cwd()
+    base_dir = Path(__file__).resolve().parent.parent  # adjust if needed
+    training_runs_dir = base_dir / "training_runs"
+    date_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$")
 
-    # Allow absolute paths to override base_dir
-    ckpt_path = Path(ckpt_dir) if Path(ckpt_dir).is_absolute() else base_dir / ckpt_dir
-    return sorted(ckpt_path.glob("*.pt"), key=lambda p: p.stat().st_mtime)
+    return sorted([
+        p.name for p in training_runs_dir.iterdir()
+        if p.is_dir() and date_pattern.match(p.name)
+    ])
 
-# Example usage
+
 if __name__ == "__main__":
-    ckpt_dir = "checkpoints"  # just the name of the folder relative to project root
-    print(f"Looking for checkpoints in: {ckpt_dir}")
-    ckpts = list_all_checkpoints(ckpt_dir)
-
-    if not ckpts:
-        print("⚠️ No checkpoints found.")
-    else:
-        print("\nAvailable checkpoints:")
-        for ckpt in ckpts:
-            print(" -", ckpt.name)
+    dates = list_training_run_dates()
+    print("Training run directories:")
+    for d in dates:
+        print("-", d)
