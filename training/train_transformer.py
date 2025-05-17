@@ -98,8 +98,8 @@ class TransformerTrainer:
                 print(f"[WARN] Specified checkpoint not found: {ckpt_path}")
 
         self.run_output_dir = self.project_root / "training_runs" / self.config["__run_time__"]
-        self.ckpt_dir = self.run_output_dir / config["ckpt_dir"]
-        self.log_dir = self.run_output_dir / config["log_dir"]
+        self.ckpt_dir = self.run_output_dir / "checkpoints"
+        self.log_dir = self.run_output_dir / "logs"
         self.data_path = self.project_root / config["dataset_path"]
 
         self.ckpt_dir.mkdir(parents=True, exist_ok=True)
@@ -122,18 +122,27 @@ class TransformerTrainer:
             class WikipediaStreamDataset(IterableDataset):
                 def __init__(self, tokenizer, max_length, max_articles=None):
                     self.tokenizer = tokenizer
-                    self.max_length = max_length
+                    self.chunk_length = max_length
+                    self.tokenizer_max_length = min(max_length * 10, 2048)  # allow large context, capped at 2048
                     self.max_articles = max_articles
-                    self.dataset = load_dataset("wikipedia", config.get("dataset_config", "20220301.en"), split="train", streaming=True)
+                    self.dataset = load_dataset(
+                        "wikipedia", config.get("dataset_config", "20220301.en"),
+                        split="train", streaming=True
+                    )
 
                 def __iter__(self):
                     count = 0
                     for example in self.dataset:
                         if self.max_articles is not None and count >= self.max_articles:
                             break
-                        tokens = self.tokenizer(example["text"], return_attention_mask=False, truncation=True, max_length=self.max_length * 10)["input_ids"]
-                        for i in range(0, len(tokens) - self.max_length + 1, self.max_length):
-                            chunk = tokens[i:i + self.max_length]
+                        tokens = self.tokenizer(
+                            example["text"],
+                            return_attention_mask=False,
+                            truncation=True,
+                            max_length=self.tokenizer_max_length
+                        )["input_ids"]
+                        for i in range(0, len(tokens) - self.chunk_length + 1, self.chunk_length):
+                            chunk = tokens[i:i + self.chunk_length]
                             yield {
                                 "input_ids": torch.tensor(chunk),
                                 "attention_mask": torch.ones(len(chunk), dtype=torch.long)
@@ -162,11 +171,11 @@ class TransformerTrainer:
             self.dataset,
             batch_size=self.config["batch_size"],
             shuffle=not config.get("use_streaming", False),
-            num_workers=0
+            num_workers = os.cpu_count() if not config.get("use_streaming", False) else 0
         )
 
         self.scheduler = ExponentialLR(self.optimizer, gamma=0.95)
-        self.tb_writer = SummaryWriter(log_dir=str(self.run_output_dir / "tensorboard"))
+        self.tb_writer = SummaryWriter(log_dir=str(self.log_dir / "tensorboard"))
 
     def _build_model(self):
         dropout = self.config.get("dropout")
@@ -265,7 +274,6 @@ class TransformerTrainer:
 
             if eval_loss < self.best_eval_loss:
                 self.best_eval_loss = eval_loss
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 ckpt_path = self.ckpt_dir / f"{self.config['__model_name__']}_best.pt"
                 torch.save({
                     "epoch": epoch,
@@ -276,7 +284,7 @@ class TransformerTrainer:
                 }, ckpt_path)
                 print(f"[INFO] Best model saved to {ckpt_path}")
 
-                versioned_ckpt_path = self.ckpt_dir / f"{self.config['__model_name__']}_best_{timestamp}.pt"
+                versioned_ckpt_path = self.ckpt_dir / f"{self.config['__model_name__']}_best_{epoch}.pt"
                 torch.save({
                     "epoch": epoch,
                     "model_state_dict": self.model.state_dict(),
@@ -291,8 +299,7 @@ class TransformerTrainer:
                         "epoch": epoch,
                         "train_loss": avg_train_loss,
                         "eval_loss": eval_loss,
-                        "perplexity": perplexity,
-                        "timestamp": timestamp
+                        "perplexity": perplexity
                     }, f, indent=2)
 
             self.scheduler.step()
@@ -341,8 +348,6 @@ def get_config(preset="base"):
         "lr": 1e-4,
         "max_articles": 5e4,  # Max number of Wikipedia articles to stream during training (via Hugging Face Datasets)
         "epochs": 10,
-        "log_dir": "logs",
-        "ckpt_dir": "checkpoints",
         "dataset_path": "data/train.txt",
         "dataset_name": "wikipedia",
         "use_wikipedia": True,
