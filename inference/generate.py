@@ -1,3 +1,5 @@
+import sys
+from pathlib import Path
 import torch
 import torch.nn.functional as F
 from model import GPTBackbone
@@ -5,6 +7,9 @@ from utils.tokenizer import load_tokenizer
 from pathlib import Path
 import argparse
 from torch.cuda.amp import autocast
+
+
+sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 
 def top_k_sampling(logits, top_k=10):
