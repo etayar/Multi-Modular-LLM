@@ -56,7 +56,7 @@ class TransformerTrainer:
         except Exception:
             commit_hash = "N/A"
         self.config["__git_commit__"] = commit_hash
-        self.config["__run_time__"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.config["__run_time__"] = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         self.device = config["device"]
         self.tokenizer = load_tokenizer()
         true_vocab_size = self.tokenizer.vocab_size
@@ -76,25 +76,17 @@ class TransformerTrainer:
         except NameError:
             self.project_root = Path.cwd()
 
-        self.ckpt_dir = self.project_root / config["ckpt_dir"]
-        self.log_dir = self.project_root / config["log_dir"]
-        self.data_path = self.project_root / config["dataset_path"]
-
-        self.ckpt_dir.mkdir(parents=True, exist_ok=True)
-        self.log_dir.mkdir(parents=True, exist_ok=True)
-        print(f"[DEBUG] Saving logs to: {self.log_dir}")
-        self.log_path = self.log_dir / "train_log.csv"
-
         self.start_epoch = 1
-        self.best_eval_loss = float("inf")
-        self.lr_history = []
-        self.early_stop_patience = config.get("early_stop_patience", 3)  # Configure it in get_config()
-
-        resume_path = config.get("resume_from")
-        if resume_path:
-            ckpt_path = Path(resume_path)
-            if not ckpt_path.is_absolute():
-                ckpt_path = self.ckpt_dir / ckpt_path
+        resume_from_date = config.get("resume_from_date")
+        if resume_from_date:
+            self.config["__run_time__"] = resume_from_date
+            ckpt_path = (
+                    self.project_root
+                    / "training_runs"
+                    / resume_from_date
+                    / config["ckpt_dir"]
+                    / f"{config['__model_name__']}_best.pt"
+            )
             if ckpt_path.exists():
                 print(f"[INFO] Loading checkpoint from: {ckpt_path.name}")
                 checkpoint = torch.load(ckpt_path, map_location=self.device)
@@ -104,16 +96,24 @@ class TransformerTrainer:
                 print(f"[INFO] Resuming from epoch {self.start_epoch}")
             else:
                 print(f"[WARN] Specified checkpoint not found: {ckpt_path}")
-        elif config.get("load_last_cp", False):
-            ckpts = list(self.ckpt_dir.glob("*.pt"))
-            if ckpts:
-                latest_ckpt = sorted(ckpts)[-1]
-                print(f"[INFO] Loading latest checkpoint: {latest_ckpt.name}")
-                checkpoint = torch.load(latest_ckpt, map_location=self.device)
-                self.model.load_state_dict(checkpoint["model_state_dict"])
-                self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-                self.start_epoch = checkpoint["epoch"] + 1
-                print(f"[INFO] Resuming from epoch {self.start_epoch}")
+
+        self.run_output_dir = self.project_root / "training_runs" / self.config["__run_time__"]
+        self.ckpt_dir = self.run_output_dir / config["ckpt_dir"]
+        self.log_dir = self.run_output_dir / config["log_dir"]
+        self.data_path = self.project_root / config["dataset_path"]
+
+        self.ckpt_dir.mkdir(parents=True, exist_ok=True)
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+        print(f"[DEBUG] Saving logs to: {self.log_dir}")
+        self.log_path = self.log_dir / "train_log.csv"
+
+        config_path = self.run_output_dir / "config_snapshot.json"
+        with open(config_path, "w") as f:
+            json.dump(self.config, f, indent=2)
+
+        self.best_eval_loss = float("inf")
+        self.lr_history = []
+        self.early_stop_patience = config.get("early_stop_patience", 3)  # Configure it in get_config()
 
         if config.get("use_wikipedia", False):
             from datasets import load_dataset
@@ -166,7 +166,7 @@ class TransformerTrainer:
         )
 
         self.scheduler = ExponentialLR(self.optimizer, gamma=0.95)
-        self.tb_writer = SummaryWriter(log_dir=str(self.log_dir / "tensorboard"))
+        self.tb_writer = SummaryWriter(log_dir=str(self.run_output_dir / "tensorboard"))
 
     def _build_model(self):
         dropout = self.config.get("dropout")
@@ -354,8 +354,7 @@ def get_config(preset="base"):
         "max_eval_batches": None,
         "lr_step_size": 2,
         "lr_gamma": 0.5,  # lr_step_size: 2 and lr_gamma: 0.5 means every 2 epochs the LR drops by half
-        "load_last_cp": False,
-        "resume_from": None,
+        "resume_from_date": None,  # Provide a date to resume from
         "__model_name__": "GPTBackbone",
         "crawl_delay": 1.0,
         **presets[preset],
