@@ -215,7 +215,12 @@ class TransformerTrainer:
 
         self.optimizer.zero_grad()
         self.scaler.scale(loss).backward()
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+
+        # Unscale gradients before measuring norm (AMP-safe)
+        self.scaler.unscale_(self.optimizer)
+        grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+        self.tb_writer.add_scalar("GradNorm", grad_norm.item())
+
         self.scaler.step(self.optimizer)
         self.scaler.update()
 
