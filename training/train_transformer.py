@@ -76,6 +76,13 @@ class TransformerTrainer:
         except NameError:
             self.project_root = Path.cwd()
 
+        self.lr_history = []
+        self.train_loss_history = []
+        self.eval_loss_history = []
+
+        self.early_stop_patience = config.get("early_stop_patience", 3)  # Configure it in get_config()
+        self.early_stopping = EarlyStopping(patience=self.early_stop_patience)
+
         self.start_epoch = 1
         resume_from_date = config.get("resume_from_date")
         if resume_from_date:
@@ -92,7 +99,13 @@ class TransformerTrainer:
                 checkpoint = torch.load(ckpt_path, map_location=self.device)
                 self.model.load_state_dict(checkpoint["model_state_dict"])
                 self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+                if "early_stop_state" in checkpoint:
+                    self.early_stopping = EarlyStopping()  # re-init instance
+                    self.early_stopping.__dict__.update(checkpoint["early_stop_state"])
                 self.start_epoch = checkpoint["epoch"] + 1
+                self.lr_history = checkpoint.get("lr_history", [])
+                self.train_loss_history = checkpoint.get("train_loss_history", [])
+                self.eval_loss_history = checkpoint.get("eval_loss_history", [])
                 print(f"[INFO] Resuming from epoch {self.start_epoch}")
             else:
                 print(f"[WARN] Specified checkpoint not found: {ckpt_path}")
@@ -112,8 +125,6 @@ class TransformerTrainer:
             json.dump(self.config, f, indent=2)
 
         self.best_eval_loss = float("inf")
-        self.lr_history = []
-        self.early_stop_patience = config.get("early_stop_patience", 3)  # Configure it in get_config()
 
         if config.get("use_wikipedia", False):
             from datasets import load_dataset
@@ -171,7 +182,7 @@ class TransformerTrainer:
             self.dataset,
             batch_size=self.config["batch_size"],
             shuffle=not config.get("use_streaming", False),
-            num_workers = os.cpu_count() if not config.get("use_streaming", False) else 0
+            num_workers = (os.cpu_count() or 2) if not config.get("use_streaming", False) else 0
         )
 
         self.scheduler = ExponentialLR(self.optimizer, gamma=0.95)
@@ -241,9 +252,6 @@ class TransformerTrainer:
         print('')
         print(f"RUN TIME: {self.config['__run_time__']}")
         print('')
-        early_stopping = EarlyStopping(patience=self.early_stop_patience)
-        train_loss_history = []
-        eval_loss_history = []
         for epoch in range(self.start_epoch, self.config["epochs"] + 1):
             train_losses = []
             print(f"\nEpoch {epoch}/{self.config['epochs']}")
@@ -264,8 +272,8 @@ class TransformerTrainer:
             avg_train_loss = sum(train_losses) / len(train_losses)
             eval_loss, perplexity = self.evaluate()
 
-            train_loss_history.append(avg_train_loss)
-            eval_loss_history.append(eval_loss)
+            self.train_loss_history.append(avg_train_loss)
+            self.eval_loss_history.append(eval_loss)
             self.lr_history.append(self.scheduler.get_last_lr()[0])
 
             print(f"Epoch {epoch} Complete — Train Loss: {avg_train_loss:.4f}, Eval Loss: {eval_loss:.4f}, Perplexity: {perplexity:.2f}")
@@ -283,7 +291,11 @@ class TransformerTrainer:
                     "model_state_dict": self.model.state_dict(),
                     "optimizer_state_dict": self.optimizer.state_dict(),
                     "loss": avg_train_loss,
-                    "config": self.config
+                    "config": self.config,
+                    "train_loss_history": self.train_loss_history,
+                    "eval_loss_history": self.eval_loss_history,
+                    "lr_history": self.lr_history,
+                    "early_stop_state": self.early_stopping.__dict__
                 }, ckpt_path)
                 print(f"[INFO] Best model saved to {ckpt_path}")
 
@@ -293,7 +305,11 @@ class TransformerTrainer:
                     "model_state_dict": self.model.state_dict(),
                     "optimizer_state_dict": self.optimizer.state_dict(),
                     "loss": avg_train_loss,
-                    "config": self.config
+                    "config": self.config,
+                    "train_loss_history": self.train_loss_history,
+                    "eval_loss_history": self.eval_loss_history,
+                    "lr_history": self.lr_history,
+                    "early_stop_state": self.early_stopping.__dict__
                 }, versioned_ckpt_path)
 
                 metadata_path = self.ckpt_dir / f"{self.config['__model_name__']}_best_meta.json"
@@ -308,7 +324,7 @@ class TransformerTrainer:
             self.scheduler.step()
 
             # **Check for Early Stopping**
-            if early_stopping.step(eval_loss):
+            if self.early_stopping.step(eval_loss):
                 print(f"Early stopping triggered at epoch {epoch + 1}.")
                 # Should i save here the model again?
                 break  # STOP TRAINING
@@ -316,8 +332,8 @@ class TransformerTrainer:
         history_path = self.log_dir / "loss_history.json"
         with open(history_path, "w") as f:
             json.dump({
-                "train_loss": train_loss_history,
-                "eval_loss": eval_loss_history,
+                "train_loss": self.train_loss_history,
+                "eval_loss": self.eval_loss_history,
                 "lr": self.lr_history
             }, f)
         print(f"[INFO] Saved loss history to: {history_path}")
@@ -325,8 +341,11 @@ class TransformerTrainer:
         csv_path = self.log_dir / "loss_history.csv"
         with open(csv_path, "w") as f:
             f.write("epoch,train_loss,eval_loss,lr\n")
-            for i in range(len(train_loss_history)):
-                f.write(f"{i + self.start_epoch},{train_loss_history[i]},{eval_loss_history[i]},{self.lr_history[i]}\n")
+            for i, (tr, ev, lr) in enumerate(
+                    zip(self.train_loss_history, self.eval_loss_history, self.lr_history),
+                    start=self.start_epoch
+            ):
+                f.write(f"{i},{tr},{ev},{lr}\n")
         print(f"[INFO] Saved loss history CSV to: {csv_path}")
 
 
