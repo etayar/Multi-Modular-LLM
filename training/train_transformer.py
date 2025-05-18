@@ -238,6 +238,9 @@ class TransformerTrainer:
         return avg_loss, perplexity
 
     def train(self):
+        print('')
+        print(f"RUN TIME: {self.config["__run_time__"]}")
+        print('')
         early_stopping = EarlyStopping(patience=self.early_stop_patience)
         train_loss_history = []
         eval_loss_history = []
