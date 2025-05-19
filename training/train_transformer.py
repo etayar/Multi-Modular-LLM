@@ -66,7 +66,23 @@ class TransformerTrainer:
         if self.tokenizer.pad_token_id is None:
             raise ValueError("Tokenizer must have pad_token_id for ignore_index loss.")
         self.criterion = nn.CrossEntropyLoss(ignore_index=self.tokenizer.pad_token_id)
-        self.optimizer = optim.AdamW(self.model.parameters(), lr=config["lr"])
+
+        # skip bias & LayerNorm
+        decay, no_decay = [], []
+        for name, param in self.model.named_parameters():
+            if param.requires_grad:
+                if name.endswith("bias") or any(k in name for k in ["LayerNorm", "layer_norm", ".ln_"]):
+                    no_decay.append(param)
+                else:
+                    decay.append(param)
+
+        optimizer_grouped = [
+            {"params": decay, "weight_decay": 0.01},
+            {"params": no_decay, "weight_decay": 0.0},
+        ]
+
+        self.optimizer = optim.AdamW(optimizer_grouped, lr=config["lr"])
+
         self.scaler = GradScaler()
 
         # ------------ dirs  ---------------------------- #
