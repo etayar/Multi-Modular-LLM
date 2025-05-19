@@ -87,7 +87,7 @@ def main():
     parser.add_argument("--save_to", type=str, default=None)
 
     # Optional config if missing in ckpt
-    parser.add_argument("--config_json", type=str, default=None, help="Path to JSON file with model config")
+    parser.add_argument("--config", type=str, default=None, help="JSON string of model config")
     args = parser.parse_args()
 
     tokenizer = load_tokenizer()
@@ -95,14 +95,13 @@ def main():
 
     if "config" in ckpt:
         config = ckpt["config"]
-    elif args.config_json:
-        print(f"[INFO] 'config' not found in checkpoint — loading from {args.config_json}")
-        with open(args.config_json, "r") as f:
-            config = json.load(f)
+    elif args.config:
+        print("[INFO] 'config' not found in checkpoint — loading from --config JSON string")
+        config = json.loads(args.config)
     else:
         raise ValueError(
-            "'config' not found in checkpoint and --config_json not provided.\n"
-            "You must pass a config JSON file containing model params."
+            "'config' not found in checkpoint and --config not provided.\n"
+            "You must pass a config JSON string like --config '{\"vocab_size\": ..., ...}'"
         )
 
     model = GPTBackbone(
